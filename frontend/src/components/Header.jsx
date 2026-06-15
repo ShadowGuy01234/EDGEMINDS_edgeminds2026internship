@@ -36,14 +36,30 @@ export default function Header({ status }) {
           </div>
         </div>
 
-        {/* RAM Usage */}
+        {/* API RAM Usage */}
         <div className="flex items-center space-x-2 border-l border-zinc-800 pl-6">
-          <span className="text-xs text-zinc-400 font-mono">RAM:</span>
+          <span className="text-xs text-zinc-400 font-mono">API RAM:</span>
           <span className="text-xs font-mono font-medium text-zinc-300">
             {ram ? `${ram} MB` : "N/A"}
           </span>
-          {env === "prod" && (
-            <span className="text-[10px] text-zinc-500 font-mono">/ 3.2 GB Limit</span>
+        </div>
+
+        {/* System RAM Usage */}
+        <div className="flex items-center space-x-2 border-l border-zinc-800 pl-6">
+          <span className="text-xs text-zinc-400 font-mono">System RAM:</span>
+          <span className="text-xs font-mono font-medium text-zinc-300">
+            {status?.sys_mem_used_mb ? `${(status.sys_mem_used_mb / 1024).toFixed(1)} GB / ${(status.sys_mem_total_mb / 1024).toFixed(1)} GB` : "N/A"}
+          </span>
+          {status?.sys_mem_percent !== undefined && (
+            <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-mono font-medium border ${
+              status.sys_mem_percent > 85 
+                ? "bg-red-500/10 text-red-400 border-red-500/30" 
+                : status.sys_mem_percent > 70 
+                  ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                  : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+            }`}>
+              {status.sys_mem_percent.toFixed(0)}%
+            </span>
           )}
         </div>
 

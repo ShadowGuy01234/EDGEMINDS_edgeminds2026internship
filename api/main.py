@@ -245,12 +245,21 @@ async def get_status(db: sqlite3.Connection = Depends(get_db)):
     ollama_reachable = await ping_ollama()
     
     # Get memory usage in MB
+    memory_used_mb = 0
+    sys_mem_used_mb = 0
+    sys_mem_total_mb = 0
+    sys_mem_percent = 0.0
     try:
         import psutil
         process = psutil.Process(os.getpid())
         memory_used_mb = int(process.memory_info().rss / 1024 / 1024)
+        
+        virtual_mem = psutil.virtual_memory()
+        sys_mem_used_mb = int(virtual_mem.used / 1024 / 1024)
+        sys_mem_total_mb = int(virtual_mem.total / 1024 / 1024)
+        sys_mem_percent = virtual_mem.percent
     except Exception:
-        memory_used_mb = 0
+        pass
         
     return {
         "index_loaded": index_loaded,
@@ -260,6 +269,9 @@ async def get_status(db: sqlite3.Connection = Depends(get_db)):
         "ollama_reachable": ollama_reachable,
         "ollama_model": OLLAMA_MODEL,
         "memory_used_mb": memory_used_mb,
+        "sys_mem_used_mb": sys_mem_used_mb,
+        "sys_mem_total_mb": sys_mem_total_mb,
+        "sys_mem_percent": sys_mem_percent,
         "env": ENV
     }
 
