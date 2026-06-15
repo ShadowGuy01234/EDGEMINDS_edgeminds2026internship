@@ -14,9 +14,9 @@ def parse_typescript_file(file_path: str, repo_path: str = "") -> Dict[str, Any]
     with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
         code = f.read()
         
-    ext = os.path.splitext(file_path)[1]
-    # Use tsx parser for .tsx files, ts parser for .ts files
-    parser = tsx_parser if ext == ".tsx" else ts_parser
+    ext = os.path.splitext(file_path)[1].lower()
+    # Use tsx parser for .tsx and .jsx files, ts parser for .ts and .js files
+    parser = tsx_parser if ext in (".tsx", ".jsx") else ts_parser
     
     tree = parser.parse(bytes(code, "utf8"))
     root_node = tree.root_node
@@ -249,7 +249,7 @@ def parse_typescript_file(file_path: str, repo_path: str = "") -> Dict[str, Any]
         
     return {
         "file_path": file_path.replace(os.sep, '/'),
-        "language": "typescript",
+        "language": "javascript" if ext in (".js", ".jsx") else "typescript",
         "imports": imports,
         "exports": exports,
         "functions": functions,

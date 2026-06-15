@@ -46,11 +46,11 @@ def ingest_repository(repo_path: str, output_dir: str) -> Dict[str, Any]:
     
     # Process each file
     for rel_path in files:
-        ext = os.path.splitext(rel_path)[1]
+        ext = os.path.splitext(rel_path)[1].lower()
         try:
             if ext == ".py":
                 blueprint = parse_python_file(rel_path, repo_path)
-            elif ext in (".ts", ".tsx"):
+            elif ext in (".ts", ".tsx", ".js", ".jsx"):
                 blueprint = parse_typescript_file(rel_path, repo_path)
             else:
                 continue

@@ -9,7 +9,7 @@ def scan_repo(repo_path: str) -> List[str]:
     ignored_dirs = {
         'node_modules', '.git', '__pycache__', 'dist', 'build', '.venv', 'venv'
     }
-    allowed_extensions = {'.py', '.ts', '.tsx'}
+    allowed_extensions = {'.py', '.ts', '.tsx', '.js', '.jsx'}
     max_file_size = 500 * 1024  # 500KB
     
     file_list = []
