@@ -21,20 +21,21 @@ def insert_symbols(conn: sqlite3.Connection, blueprints: List[Dict[str, Any]], e
     for bp in blueprints:
         file_path = bp["file_path"]
         language = bp["language"]
+        layer = bp.get("layer", "unknown")
         
         # 1. Functions
         for func in bp.get("functions", []):
-            symbols_to_insert.append((file_path, func, "function", language))
+            symbols_to_insert.append((file_path, func, "function", language, layer))
             
         # 2. Classes
         for cls in bp.get("classes", []):
-            symbols_to_insert.append((file_path, cls, "class", language))
+            symbols_to_insert.append((file_path, cls, "class", language, layer))
             
         # 3. Exports
         for exp in bp.get("exports", []):
             # Avoid duplicating default exports if they are already named, 
             # but we can insert them as "export" kind
-            symbols_to_insert.append((file_path, exp, "export", language))
+            symbols_to_insert.append((file_path, exp, "export", language, layer))
             
     if not symbols_to_insert:
         return
@@ -48,15 +49,15 @@ def insert_symbols(conn: sqlite3.Connection, blueprints: List[Dict[str, Any]], e
     vectors = embedder.embed_batch(names)
     
     # Insert symbols and their corresponding vectors
-    for (file_path, name, kind, language), vector in zip(symbols_to_insert, vectors):
+    for (file_path, name, kind, language, layer), vector in zip(symbols_to_insert, vectors):
         vector_json = json.dumps(vector)
         
         cursor.execute(
             """
-            INSERT INTO symbols (file_path, name, kind, language, embedding)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO symbols (file_path, name, kind, language, layer, embedding)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (file_path, name, kind, language, vector_json)
+            (file_path, name, kind, language, layer, vector_json)
         )
         symbol_id = cursor.lastrowid
         

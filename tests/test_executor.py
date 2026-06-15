@@ -77,7 +77,7 @@ class TestQueryExecutor(unittest.TestCase):
         self.assertEqual(len(res["dependents"]), 1)
         self.assertEqual(res["dependents"][0]["file_path"], "src/app.py")
         
-        mock_vector.assert_called_once_with(self.conn, self.embedder, ["config", "imports"], top_k=1, has_vss=False)
+        mock_vector.assert_called_once_with(self.conn, self.embedder, ["config", "imports"], top_k=1, has_vss=False, layer_filter=None)
         mock_graph.assert_called_once_with(self.conn, "src/config.py", depth=3)
 
     @patch("engine.executor.vector_search")
@@ -110,7 +110,7 @@ class TestQueryExecutor(unittest.TestCase):
         self.assertEqual(len(res["symbol_matches"]), 2)
         self.assertEqual(len(res["dependencies"]), 1)
         
-        mock_vector.assert_called_once_with(self.conn, self.embedder, ["middleware"], top_k=10, has_vss=False)
+        mock_vector.assert_called_once_with(self.conn, self.embedder, ["middleware"], top_k=10, has_vss=False, layer_filter=None)
         mock_graph.assert_called_once_with(self.conn, "src/middleware.py", depth=3)
 
     @patch("engine.executor.vector_search")
@@ -134,6 +134,25 @@ class TestQueryExecutor(unittest.TestCase):
         self.assertEqual(res["symbol_matches"], [])
         self.assertEqual(res["dependents"], [])
         self.assertEqual(res["dependencies"], [])
+
+    @patch("engine.executor.vector_search")
+    def test_layer_aware_execution(self, mock_vector):
+        decision = RouterDecision(
+            tool="vector",
+            keywords=["auth"],
+            routed_by="slm",
+            slm_raw="auth",
+            latency_ms=10
+        )
+        mock_vector.return_value = []
+        
+        # Call execute with backend layer filter
+        execute(self.conn, self.embedder, decision, layer_filter="backend")
+        
+        # Verify layer_filter was passed to vector_search
+        mock_vector.assert_called_once_with(
+            self.conn, self.embedder, ["auth"], top_k=10, has_vss=False, layer_filter="backend"
+        )
 
 if __name__ == "__main__":
     unittest.main()

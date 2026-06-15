@@ -81,5 +81,25 @@ class TestGraphQueries(unittest.TestCase):
         self.assertEqual(res["dependencies"], [])
         self.assertFalse(res["depth_capped"])
 
+    def test_resolve_import_path_javascript(self):
+        from indexer.graph_builder import resolve_import_path
+        known_paths = {
+            "backend/src/middleware/auth.js",
+            "backend/src/utils/jwt.js",
+            "frontend/src/context/AuthContext.tsx"
+        }
+        
+        # Test .js importing .js relatively
+        res = resolve_import_path("backend/src/middleware/auth.js", "../utils/jwt", known_paths)
+        self.assertEqual(res, "backend/src/utils/jwt.js")
+        
+        # Test .js importing with exact match
+        res = resolve_import_path("backend/src/middleware/auth.js", "backend/src/utils/jwt.js", known_paths)
+        self.assertEqual(res, "backend/src/utils/jwt.js")
+        
+        # Test .tsx relative import
+        res = resolve_import_path("frontend/src/context/AuthContext.tsx", "./AuthContext", known_paths)
+        self.assertEqual(res, "frontend/src/context/AuthContext.tsx")
+
 if __name__ == "__main__":
     unittest.main()

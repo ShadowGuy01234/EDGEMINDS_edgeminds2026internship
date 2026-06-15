@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function TracePanel({ trace, isLoading }) {
+export default function TracePanel({ trace, isLoading, explanation, isStreamingExplanation }) {
   if (isLoading) {
     return (
       <div className="flex-1 h-full flex flex-col items-center justify-center text-center p-8 bg-zinc-950/20">
@@ -65,9 +65,25 @@ export default function TracePanel({ trace, isLoading }) {
     }
   };
 
+  const getLayerBadgeColor = (layer) => {
+    switch (layer?.toLowerCase()) {
+      case "backend":
+        return "bg-cyan-500/10 text-cyan-400 border-cyan-500/30";
+      case "frontend":
+        return "bg-pink-500/10 text-pink-400 border-pink-500/30";
+      case "shared":
+        return "bg-purple-500/10 text-purple-400 border-purple-500/30";
+      case "test":
+        return "bg-yellow-500/10 text-yellow-400 border-yellow-500/30";
+      default:
+        return "bg-zinc-800 text-zinc-400 border-zinc-700";
+    }
+  };
+
   const getFileIcon = (filePath) => {
     if (filePath?.endsWith(".py")) return "🐍";
     if (filePath?.endsWith(".ts") || filePath?.endsWith(".tsx")) return "🟦";
+    if (filePath?.endsWith(".js") || filePath?.endsWith(".jsx")) return "🟨";
     return "📄";
   };
 
@@ -116,6 +132,23 @@ export default function TracePanel({ trace, isLoading }) {
           </div>
         </div>
       </div>
+
+      {/* Codebase NLP Explanation */}
+      {(explanation || isStreamingExplanation) && (
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold text-zinc-400 font-mono uppercase tracking-wider px-1">
+            Architectural Explanation
+          </h3>
+          <div className="glass-panel rounded-xl p-5 border-violet-500/20 relative overflow-hidden bg-zinc-950/45 shadow-lg shadow-violet-500/5">
+            <p className="text-sm text-zinc-300 leading-relaxed font-sans whitespace-pre-wrap">
+              {explanation}
+              {isStreamingExplanation && (
+                <span className="inline-block w-1.5 h-3.5 ml-1 bg-violet-400 animate-pulse align-middle" />
+              )}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Dependency Graph Canvas */}
       {trace.tool_used !== "vector" && (
@@ -180,9 +213,16 @@ export default function TracePanel({ trace, isLoading }) {
                     {trace.seed.symbol || trace.seed.file_path.split("/").pop()}
                   </h4>
 
-                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded border mb-4 inline-block ${getKindBadgeColor(trace.seed.kind)}`}>
-                    {trace.seed.kind || "file"}
-                  </span>
+                  <div className="flex items-center justify-center space-x-2 mb-4">
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded border inline-block ${getKindBadgeColor(trace.seed.kind)}`}>
+                      {trace.seed.kind || "file"}
+                    </span>
+                    {trace.seed.layer && (
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded border inline-block ${getLayerBadgeColor(trace.seed.layer)}`}>
+                        {trace.seed.layer}
+                      </span>
+                    )}
+                  </div>
 
                   <div className="text-zinc-400 font-mono text-xs w-full text-center truncate px-4">
                     <span className="text-zinc-600">File:</span> {trace.seed.file_path}
@@ -275,6 +315,11 @@ export default function TracePanel({ trace, isLoading }) {
                         <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border font-medium uppercase ${getKindBadgeColor(match.kind)}`}>
                           {match.kind}
                         </span>
+                        {match.layer && (
+                          <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border font-medium uppercase ${getLayerBadgeColor(match.layer)}`}>
+                            {match.layer}
+                          </span>
+                        )}
                       </div>
                       <span className="text-xs text-zinc-400 font-mono block truncate">
                         {getFileIcon(match.file_path)} {match.file_path}

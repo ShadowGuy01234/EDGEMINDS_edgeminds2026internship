@@ -7,6 +7,7 @@ from typing import List, Dict, Any
 from parser.file_scanner import scan_repo
 from parser.python_parser import parse_python_file
 from parser.typescript_parser import parse_typescript_file
+from parser.layer_classifier import classify_layer
 
 def ingest_repository(repo_path: str, output_dir: str) -> Dict[str, Any]:
     """
@@ -55,6 +56,7 @@ def ingest_repository(repo_path: str, output_dir: str) -> Dict[str, Any]:
             else:
                 continue
                 
+            blueprint["layer"] = classify_layer(rel_path)
             blueprints.append(blueprint)
             total_functions += len(blueprint.get("functions", []))
             total_classes += len(blueprint.get("classes", []))

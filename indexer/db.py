@@ -50,7 +50,8 @@ def init_db(db_path: str) -> sqlite3.Connection:
         language TEXT NOT NULL,
         functions TEXT,   -- JSON array of strings
         classes TEXT,     -- JSON array of strings
-        exports TEXT      -- JSON array of strings
+        exports TEXT,     -- JSON array of strings
+        layer TEXT DEFAULT 'unknown'
     )
     """)
     
@@ -75,6 +76,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
         name TEXT NOT NULL,
         kind TEXT NOT NULL,  -- 'function' | 'class' | 'export'
         language TEXT NOT NULL,
+        layer TEXT DEFAULT 'unknown',
         embedding TEXT       -- JSON array of floats (used as fallback vector index)
     )
     """)
@@ -111,5 +113,16 @@ def init_db(db_path: str) -> sqlite3.Connection:
             # Table might already exist or there could be a schema discrepancy
             pass
             
+    # Dynamic schema migrations for existing databases
+    try:
+        cursor.execute("ALTER TABLE nodes ADD COLUMN layer TEXT DEFAULT 'unknown'")
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        cursor.execute("ALTER TABLE symbols ADD COLUMN layer TEXT DEFAULT 'unknown'")
+    except sqlite3.OperationalError:
+        pass
+        
     conn.commit()
     return conn

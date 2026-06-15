@@ -14,15 +14,16 @@ def insert_nodes(conn: sqlite3.Connection, blueprints: List[Dict[str, Any]]):
     for bp in blueprints:
         cursor.execute(
             """
-            INSERT OR REPLACE INTO nodes (file_path, language, functions, classes, exports)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO nodes (file_path, language, functions, classes, exports, layer)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 bp["file_path"],
                 bp["language"],
                 json.dumps(bp.get("functions", [])),
                 json.dumps(bp.get("classes", [])),
-                json.dumps(bp.get("exports", []))
+                json.dumps(bp.get("exports", [])),
+                bp.get("layer", "unknown")
             )
         )
     conn.commit()
@@ -77,7 +78,7 @@ def resolve_import_path(source_file: str, import_module: str, known_paths: Set[s
                 return c
                 
     # 2. Handle TypeScript / JS imports
-    elif source_file.endswith((".ts", ".tsx")):
+    elif source_file.endswith((".ts", ".tsx", ".js", ".jsx")):
         module_path = import_module
         
         # Handle path alias e.g. @/components/Header
@@ -98,8 +99,12 @@ def resolve_import_path(source_file: str, import_module: str, known_paths: Set[s
             module_path,
             f"{module_path}.ts",
             f"{module_path}.tsx",
+            f"{module_path}.js",
+            f"{module_path}.jsx",
             f"{module_path}/index.ts",
             f"{module_path}/index.tsx",
+            f"{module_path}/index.js",
+            f"{module_path}/index.jsx",
             f"{module_path}.d.ts"
         ]
         for c in candidates:

@@ -7,7 +7,7 @@ from indexer.graph_query import graph_trace
 from indexer.vector_query import vector_search
 from indexer.db import HAS_VSS
 
-def execute(conn: sqlite3.Connection, embedder, decision: RouterDecision) -> Dict[str, Any]:
+def execute(conn: sqlite3.Connection, embedder, decision: RouterDecision, layer_filter: str = None) -> Dict[str, Any]:
     """
     Orchestrates index searches based on the routing decision.
     Executes the appropriate graph and/or vector queries and returns a unified TraceResult.
@@ -30,7 +30,7 @@ def execute(conn: sqlite3.Connection, embedder, decision: RouterDecision) -> Dic
     # 1. Vector Search Path
     if tool_used in ("vector", "hybrid"):
         # Fetch top 10 matches
-        matches = vector_search(conn, embedder, keywords, top_k=10, has_vss=has_vss)
+        matches = vector_search(conn, embedder, keywords, top_k=10, has_vss=has_vss, layer_filter=layer_filter)
         symbol_matches = matches
         
         if not matches:
@@ -43,13 +43,14 @@ def execute(conn: sqlite3.Connection, embedder, decision: RouterDecision) -> Dic
                 "file_path": top["file_path"],
                 "symbol": top["name"],
                 "kind": top["kind"],
+                "layer": top.get("layer", "unknown"),
                 "similarity": top["similarity"]
             }
             
     # 2. Graph Traversal Path
     if tool_used == "graph":
         # We need a seed file to run BFS. Find the single top symbol match
-        matches = vector_search(conn, embedder, keywords, top_k=1, has_vss=has_vss)
+        matches = vector_search(conn, embedder, keywords, top_k=1, has_vss=has_vss, layer_filter=layer_filter)
         if not matches:
             no_match = True
         else:
@@ -58,6 +59,7 @@ def execute(conn: sqlite3.Connection, embedder, decision: RouterDecision) -> Dic
                 "file_path": top["file_path"],
                 "symbol": top["name"],
                 "kind": top["kind"],
+                "layer": top.get("layer", "unknown"),
                 "similarity": top["similarity"]
             }
             

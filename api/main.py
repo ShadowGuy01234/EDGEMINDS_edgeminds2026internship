@@ -6,7 +6,7 @@ import time
 from typing import Dict, Any
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from api.config import (
@@ -188,10 +188,19 @@ def query_codebase(payload: QueryRequest, db: sqlite3.Connection = Depends(get_d
     # 1. Route the query using Ollama SLM
     decision = call_ollama(query_text)
     
-    # 2. Execute Graph/Vector searches
-    trace_result = execute(db, embedder, decision)
-    # Ensure correct query text is set
+    # 2. Detect layer filter from query text
+    layer_filter = None
+    q_lower = query_text.lower()
+    if any(w in q_lower for w in ["backend", "server", "api", "middleware", "route", "routes", "controller", "controllers", "db", "database", "service", "services"]):
+        layer_filter = "backend"
+    elif any(w in q_lower for w in ["frontend", "ui", "client", "component", "components", "page", "pages", "view", "views", "react", "hook", "hooks"]):
+        layer_filter = "frontend"
+        
+    # 3. Execute Graph/Vector searches
+    trace_result = execute(db, embedder, decision, layer_filter=layer_filter)
+    # Ensure correct query text and layer filter are set
     trace_result["query"] = query_text
+    trace_result["layer_filter"] = layer_filter
     
     # 3. Log results to history table
     cursor.execute(
@@ -344,6 +353,97 @@ def get_history(db: sqlite3.Connection = Depends(get_db)):
         })
         
     return {"history": history}
+
+
+class ExplainRequest(BaseModel):
+    query: str
+    tool_used: str
+    seed: dict = None
+    dependents: list = []
+    dependencies: list = []
+    symbol_matches: list = []
+
+
+@app.post("/query/explain")
+async def explain_query(payload: ExplainRequest):
+    """
+    Streams a natural language explanation of the query trace results.
+    """
+    # 1. Serialize the trace results
+    context_lines = []
+    context_lines.append(f"Query: {payload.query}")
+    context_lines.append(f"Search Method: {payload.tool_used}")
+    if payload.seed:
+        context_lines.append(f"Anchor Seed: {payload.seed.get('symbol', 'file')} in {payload.seed.get('file_path')} (type: {payload.seed.get('kind', 'file')})")
+    if payload.dependents:
+        context_lines.append("Upstream Dependents (files importing seed):")
+        for d in payload.dependents:
+            context_lines.append(f" - {d.get('file_path')} ({d.get('hop')} hops away)")
+    if payload.dependencies:
+        context_lines.append("Downstream Dependencies (seed imports):")
+        for d in payload.dependencies:
+            context_lines.append(f" - {d.get('file_path')} ({d.get('hop')} hops away)")
+    if payload.symbol_matches:
+        context_lines.append("Semantic symbol matches:")
+        for m in payload.symbol_matches[:5]:  # Limit to top 5 for context length
+            context_lines.append(f" - {m.get('name')} in {m.get('file_path')} ({m.get('kind')}, similarity: {int(m.get('similarity', 0)*100)}%)")
+            
+    context_str = "\n".join(context_lines)
+    
+    system_instruction = (
+        "You are CodeGenome-Edge, a codebase search assistant. "
+        "Your task is to answer the user's codebase query directly using the search results context provided. "
+        "Never explain how the search tool works (do not mention vector search, graph search, similarity, or seed/anchor). "
+        "Focus on the code facts: state where the symbols/files are located and name the other files that import or depend on them as shown in the context. "
+        "Be clear, factual, and extremely concise (maximum 3 sentences). "
+        "Do not write JSON, output clean raw text only."
+    )
+    
+    prompt = (
+        f"Search Results Context:\n{context_str}\n\n"
+        f"User Query: {payload.query}\n\n"
+        "Direct Answer:"
+    )
+    
+    ollama_payload = {
+        "model": OLLAMA_MODEL,
+        "messages": [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": prompt}
+        ],
+        "options": {
+            "temperature": 0.1,
+            "num_predict": 120,
+            "num_ctx": 2048
+        },
+        "stream": True
+    }
+    
+    async def stream_generator():
+        url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
+        # Use 15 second timeout to allow Ollama to start generating
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            try:
+                async with client.stream("POST", url, json=ollama_payload) as response:
+                    if response.status_code != 200:
+                        yield f"Error: Ollama returned status code {response.status_code}"
+                        return
+                        
+                    async for chunk in response.aiter_text():
+                        for line in chunk.split("\n"):
+                            if line.strip():
+                                try:
+                                    data = json.loads(line)
+                                    content = data.get("message", {}).get("content", "")
+                                    if content:
+                                        yield content
+                                except Exception:
+                                    pass
+            except Exception as e:
+                yield f"Error generating explanation: {str(e)}"
+                 
+    return StreamingResponse(stream_generator(), media_type="text/plain")
+
 
 # Serve static files if FRONTEND_STATIC_DIR is provided
 if FRONTEND_STATIC_DIR:

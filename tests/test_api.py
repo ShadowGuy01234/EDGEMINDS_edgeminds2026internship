@@ -51,6 +51,21 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertIn("routed_by", data)
         self.assertIn("seed", data)
         self.assertIn("symbol_matches", data)
+
+    def test_post_query_layer_filter(self):
+        # Test query targeting backend specifically
+        payload = {"query": "Find the parser in backend"}
+        response = self.client.post("/query", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["layer_filter"], "backend")
+        
+        # Test query targeting frontend specifically
+        payload = {"query": "Find the button in frontend"}
+        response = self.client.post("/query", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["layer_filter"], "frontend")
         
     def test_post_query_empty(self):
         response = self.client.post("/query", json={"query": ""})
@@ -64,3 +79,24 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         data = response.json()
         self.assertEqual(data["error"], "repo_not_found")
+
+    def test_post_query_explain(self):
+        payload = {
+            "query": "Find the python parser",
+            "tool_used": "vector",
+            "seed": {"symbol": "python_parser", "file_path": "parser/python_parser.py", "kind": "function"},
+            "dependents": [{"file_path": "parser/ingest.py", "hop": 1}],
+            "dependencies": [],
+            "symbol_matches": [{"name": "python_parser", "file_path": "parser/python_parser.py", "kind": "function", "similarity": 0.95}]
+        }
+        response = self.client.post("/query/explain", json=payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("content-type"), "text/plain; charset=utf-8")
+        
+        chunks = []
+        for chunk in response.iter_bytes():
+            chunks.append(chunk.decode("utf-8"))
+            
+        full_text = "".join(chunks)
+        self.assertTrue(len(full_text) > 0)
+

@@ -3,7 +3,7 @@ import Header from "./components/Header";
 import IngestPanel from "./components/IngestPanel";
 import HistorySidebar from "./components/HistorySidebar";
 import TracePanel from "./components/TracePanel";
-import { getStatus, getHistory, submitQuery } from "./api";
+import { getStatus, getHistory, submitQuery, streamExplanation } from "./api";
 
 export default function App() {
   const [status, setStatus] = useState(null);
@@ -13,6 +13,8 @@ export default function App() {
   const [queryInput, setQueryInput] = useState("");
   const [isLoadingTrace, setIsLoadingTrace] = useState(false);
   const [traceError, setTraceError] = useState("");
+  const [explanation, setExplanation] = useState("");
+  const [isStreamingExplanation, setIsStreamingExplanation] = useState(false);
 
   const refreshData = async () => {
     try {
@@ -69,6 +71,24 @@ export default function App() {
         setActiveQueryId(h.history[0].id);
       }
       setQueryInput("");
+
+      // Trigger explanation stream asynchronously
+      setExplanation("");
+      setIsStreamingExplanation(true);
+      streamExplanation(
+        res,
+        (chunk) => {
+          setExplanation((prev) => prev + chunk);
+        },
+        () => {
+          setIsStreamingExplanation(false);
+        },
+        (err) => {
+          console.error("Explanation stream error:", err);
+          setExplanation("Failed to generate code explanation.");
+          setIsStreamingExplanation(false);
+        }
+      );
     } catch (err) {
       setTraceError(err.message || "Query execution failed.");
     } finally {
@@ -81,6 +101,24 @@ export default function App() {
     setTraceError("");
     if (historyItem.result) {
       setCurrentTrace(historyItem.result);
+      
+      // Trigger explanation stream for selected query
+      setExplanation("");
+      setIsStreamingExplanation(true);
+      streamExplanation(
+        historyItem.result,
+        (chunk) => {
+          setExplanation((prev) => prev + chunk);
+        },
+        () => {
+          setIsStreamingExplanation(false);
+        },
+        (err) => {
+          console.error("Explanation stream error:", err);
+          setExplanation("Failed to generate code explanation.");
+          setIsStreamingExplanation(false);
+        }
+      );
     } else {
       // Fallback if result isn't pre-loaded in the DB record
       setQueryInput(historyItem.query);
@@ -159,7 +197,12 @@ export default function App() {
 
           {/* Trace Canvas Panel */}
           <div className="flex-1 overflow-hidden">
-            <TracePanel trace={currentTrace} isLoading={isLoadingTrace} />
+            <TracePanel 
+              trace={currentTrace} 
+              isLoading={isLoadingTrace} 
+              explanation={explanation}
+              isStreamingExplanation={isStreamingExplanation}
+            />
           </div>
         </main>
       </div>

@@ -24,6 +24,7 @@ class TestVectorQueries(unittest.TestCase):
             name TEXT NOT NULL,
             kind TEXT NOT NULL,
             language TEXT NOT NULL,
+            layer TEXT DEFAULT 'unknown',
             embedding TEXT
         )
         """)
@@ -31,22 +32,22 @@ class TestVectorQueries(unittest.TestCase):
         # Populate with some mock symbols and compute their actual embeddings
         # so the cosine similarity test is realistic!
         mock_symbols = [
-            ("src/auth/middleware.py", "verify_token", "function", "python"),
-            ("src/auth/middleware.py", "AuthMiddleware", "class", "python"),
-            ("src/routes/user.py", "get_user_profile", "function", "python"),
-            ("src/db/session.py", "get_db_session", "function", "python")
+            ("src/auth/middleware.py", "verify_token", "function", "python", "backend"),
+            ("src/auth/middleware.py", "AuthMiddleware", "class", "python", "backend"),
+            ("src/routes/user.py", "get_user_profile", "function", "python", "backend"),
+            ("src/db/session.py", "get_db_session", "function", "python", "backend")
         ]
         
         names = [item[1] for item in mock_symbols]
         vectors = self.embedder.embed_batch(names)
         
-        for (file_path, name, kind, lang), vector in zip(mock_symbols, vectors):
+        for (file_path, name, kind, lang, layer), vector in zip(mock_symbols, vectors):
             self.cursor.execute(
                 """
-                INSERT INTO symbols (file_path, name, kind, language, embedding)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO symbols (file_path, name, kind, language, layer, embedding)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (file_path, name, kind, lang, json.dumps(vector))
+                (file_path, name, kind, lang, layer, json.dumps(vector))
             )
         self.conn.commit()
         

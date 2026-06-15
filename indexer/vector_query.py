@@ -29,11 +29,11 @@ def calculate_cosine_similarity(v1: List[float], v2: List[float]) -> float:
             return 0.0
         return dot_product / (mag1 * mag2)
 
-def vector_search(conn: sqlite3.Connection, embedder, keywords: List[str], top_k: int = 10, has_vss: bool = False) -> List[Dict[str, Any]]:
+def vector_search(conn: sqlite3.Connection, embedder, keywords: List[str], top_k: int = 10, has_vss: bool = False, layer_filter: str = None) -> List[Dict[str, Any]]:
     """
     Searches the vector store for symbols matching the query keywords.
     If sqlite-vss is available, performs search in SQL. Otherwise, uses Python fallback.
-    Returns: list of { name, file_path, kind, similarity } sorted by similarity descending.
+    Returns: list of { name, file_path, kind, layer, similarity } sorted by similarity descending.
     """
     if not keywords:
         return []
@@ -55,24 +55,28 @@ def vector_search(conn: sqlite3.Connection, embedder, keywords: List[str], top_k
                 WHERE vss_search(embedding, ?) 
                 LIMIT ?
                 """,
-                (query_vector_json, top_k * 2) # Get extra to join and filter
+                (query_vector_json, top_k * 5) # Get extra to join and filter
             )
             rows = cursor.fetchall()
             
             # Join rowids back to symbols table
             for rowid, distance in rows:
                 cursor.execute(
-                    "SELECT name, file_path, kind FROM symbols WHERE id = ?",
+                    "SELECT name, file_path, kind, layer FROM symbols WHERE id = ?",
                     (rowid,)
                 )
                 sym_row = cursor.fetchone()
                 if sym_row:
+                    name, file_path, kind, layer = sym_row
                     similarity = 1.0 - distance
                     if similarity >= 0.35:
+                        if layer_filter and layer != layer_filter and layer != "shared":
+                            continue
                         results.append({
-                            "name": sym_row[0],
-                            "file_path": sym_row[1],
-                            "kind": sym_row[2],
+                            "name": name,
+                            "file_path": file_path,
+                            "kind": kind,
+                            "layer": layer,
                             "similarity": round(similarity, 4)
                         })
             # Sort and truncate to top_k
@@ -84,20 +88,23 @@ def vector_search(conn: sqlite3.Connection, embedder, keywords: List[str], top_k
             
     # Python Fallback Search
     cursor = conn.cursor()
-    cursor.execute("SELECT name, file_path, kind, embedding FROM symbols")
+    cursor.execute("SELECT name, file_path, kind, layer, embedding FROM symbols")
     rows = cursor.fetchall()
     
-    for name, file_path, kind, embedding_json in rows:
+    for name, file_path, kind, layer, embedding_json in rows:
         if not embedding_json:
             continue
         try:
             sym_vector = json.loads(embedding_json)
             similarity = calculate_cosine_similarity(query_vector, sym_vector)
             if similarity >= 0.35:
+                if layer_filter and layer != layer_filter and layer != "shared":
+                    continue
                 results.append({
                     "name": name,
                     "file_path": file_path,
                     "kind": kind,
+                    "layer": layer,
                     "similarity": round(similarity, 4)
                 })
         except Exception:

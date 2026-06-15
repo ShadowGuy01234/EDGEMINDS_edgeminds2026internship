@@ -52,3 +52,44 @@ export async function getFiles() {
 export async function getHistory() {
   return fetchJson("/history");
 }
+
+export async function streamExplanation(traceResult, onChunk, onComplete, onError) {
+  try {
+    const base = API_BASE.replace(/\/$/, "");
+    const url = `${base}/query/explain`;
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query: traceResult.query || "",
+        tool_used: traceResult.tool_used,
+        seed: traceResult.seed,
+        dependents: traceResult.dependents || [],
+        dependencies: traceResult.dependencies || [],
+        symbol_matches: traceResult.symbol_matches || []
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP Error ${response.status}`);
+    }
+    
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      const chunk = decoder.decode(value, { stream: true });
+      onChunk(chunk);
+    }
+    onComplete();
+  } catch (err) {
+    onError(err);
+  }
+}
