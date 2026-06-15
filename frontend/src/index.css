@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Fira Code', monospace;
+}
+
+body {
+  background-color: #030303;
+  color: #f4f4f5;
+  font-family: var(--font-sans);
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* We handle scrolling inside panels */
+}
+
+/* Custom premium classes */
+.glass-panel {
+  background: rgba(9, 9, 11, 0.75);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(63, 63, 70, 0.4);
+}
+
+.glass-card {
+  background: rgba(20, 20, 25, 0.5);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(63, 63, 70, 0.2);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  background: rgba(30, 30, 38, 0.6);
+  border-color: rgba(167, 139, 250, 0.3); /* Violet hover */
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px -2px rgba(139, 92, 246, 0.1);
+}
+
+.glow-indigo {
+  box-shadow: 0 0 40px -5px rgba(99, 102, 241, 0.15);
+}
+
+.glow-violet {
+  box-shadow: 0 0 50px -5px rgba(139, 92, 246, 0.2);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(9, 9, 11, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(63, 63, 70, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 170, 0.5);
+}
