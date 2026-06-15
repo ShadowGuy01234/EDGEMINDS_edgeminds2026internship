@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sentence-transformers
+tree-sitter==0.21.3
+tree-sitter-languages
+python-dotenv
+psutil
+httpx
+pytest
+pytest-asyncio

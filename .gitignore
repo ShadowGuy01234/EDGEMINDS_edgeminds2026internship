@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Database and manifest storage
+index/
+
+# Environment configurations
+.env
+.env.*
+.env.local
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Node modules and build output
+node_modules/
+dist/
+build/
+*.log
