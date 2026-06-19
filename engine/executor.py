@@ -1,11 +1,59 @@
 import time
 import sqlite3
-from typing import Dict, Any, List
+import os
+import re
+from typing import Dict, Any, List, Optional
 
 from router.fallback import RouterDecision
 from indexer.graph_query import graph_trace
 from indexer.vector_query import vector_search
 from indexer.db import HAS_VSS
+
+def find_seed_file_by_name(conn: sqlite3.Connection, query: str, keywords: List[str]) -> Optional[str]:
+    """
+    Checks if the query or keywords contain a file name or path that exists in the nodes table.
+    Returns the file_path if found, otherwise None.
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT file_path FROM nodes")
+        file_paths = [row[0] for row in cursor.fetchall()]
+        
+        query_lower = query.lower().replace('\\', '/')
+        query_normalized = query_lower.replace(' ', '_').replace('-', '_')
+        
+        # Sort paths by length descending so that longer paths match first
+        for path in sorted(file_paths, key=len, reverse=True):
+            path_clean = path.lower().replace('\\', '/')
+            basename = os.path.basename(path_clean)
+            
+            # If the exact basename is in the query (e.g. "config.py")
+            if basename in query_lower:
+                return path
+                
+            # If name without extension matches (e.g. "config")
+            name_no_ext = os.path.splitext(basename)[0]
+            if len(name_no_ext) > 3:
+                # Check normalized query (for "file scanner" -> "file_scanner" matches)
+                if name_no_ext in query_normalized:
+                    return path
+                # Word boundary check
+                pattern = r'\b' + re.escape(name_no_ext) + r'\b'
+                if re.search(pattern, query_lower):
+                    return path
+                    
+        # Check keywords directly
+        for path in file_paths:
+            path_clean = path.lower().replace('\\', '/')
+            basename = os.path.basename(path_clean)
+            name_no_ext = os.path.splitext(basename)[0]
+            for kw in keywords:
+                kw_clean = kw.lower().strip()
+                if kw_clean == basename or (len(name_no_ext) > 3 and kw_clean == name_no_ext):
+                    return path
+    except Exception:
+        pass
+    return None
 
 def execute(conn: sqlite3.Connection, embedder, decision: RouterDecision, layer_filter: str = None) -> Dict[str, Any]:
     """
@@ -19,6 +67,9 @@ def execute(conn: sqlite3.Connection, embedder, decision: RouterDecision, layer_
     
     tool_used = decision.tool
     keywords = decision.keywords
+    
+    # In api.main.py we can set decision.slm_raw, but if it is empty, default to query text
+    query_text = decision.slm_raw if decision.slm_raw else " ".join(keywords)
     
     seed = None
     symbol_matches: List[Dict[str, Any]] = []
@@ -34,11 +85,45 @@ def execute(conn: sqlite3.Connection, embedder, decision: RouterDecision, layer_
         symbol_matches = matches
         
         if not matches:
-            no_match = True
+            # Check if we can still find a direct file path match
+            matched_file = find_seed_file_by_name(conn, query_text, keywords)
+            if matched_file:
+                top = {
+                    "file_path": matched_file,
+                    "name": os.path.basename(matched_file),
+                    "kind": "file",
+                    "layer": "unknown",
+                    "similarity": 1.0
+                }
+                seed = {
+                    "file_path": top["file_path"],
+                    "symbol": top["name"],
+                    "kind": top["kind"],
+                    "layer": top.get("layer", "unknown"),
+                    "similarity": top["similarity"]
+                }
+            else:
+                no_match = True
         else:
-            # Anchor seed on the top match
-            top = matches[0]
-            # Find kind for seed mapping
+            # Check if there is a direct file path match in the query
+            matched_file = find_seed_file_by_name(conn, query_text, keywords)
+            if matched_file:
+                file_matches = [m for m in matches if m["file_path"] == matched_file]
+                if file_matches:
+                    top = file_matches[0]
+                else:
+                    top = {
+                        "file_path": matched_file,
+                        "name": os.path.basename(matched_file),
+                        "kind": "file",
+                        "layer": "unknown",
+                        "similarity": 1.0
+                    }
+            else:
+                # Prioritize non-test files for the seed
+                non_test_matches = [m for m in matches if m.get("layer") != "test"]
+                top = non_test_matches[0] if non_test_matches else matches[0]
+                
             seed = {
                 "file_path": top["file_path"],
                 "symbol": top["name"],
@@ -49,19 +134,32 @@ def execute(conn: sqlite3.Connection, embedder, decision: RouterDecision, layer_
             
     # 2. Graph Traversal Path
     if tool_used == "graph":
-        # We need a seed file to run BFS. Find the single top symbol match
-        matches = vector_search(conn, embedder, keywords, top_k=1, has_vss=has_vss, layer_filter=layer_filter)
-        if not matches:
-            no_match = True
-        else:
-            top = matches[0]
+        # Check if there is a direct file path match in the query
+        matched_file = find_seed_file_by_name(conn, query_text, keywords)
+        if matched_file:
             seed = {
-                "file_path": top["file_path"],
-                "symbol": top["name"],
-                "kind": top["kind"],
-                "layer": top.get("layer", "unknown"),
-                "similarity": top["similarity"]
+                "file_path": matched_file,
+                "symbol": os.path.basename(matched_file),
+                "kind": "file",
+                "layer": "unknown",
+                "similarity": 1.0
             }
+        else:
+            # We need a seed file to run BFS. Find the single top symbol match
+            matches = vector_search(conn, embedder, keywords, top_k=5, has_vss=has_vss, layer_filter=layer_filter)
+            if not matches:
+                no_match = True
+            else:
+                # Prioritize non-test files
+                non_test_matches = [m for m in matches if m.get("layer") != "test"]
+                top = non_test_matches[0] if non_test_matches else matches[0]
+                seed = {
+                    "file_path": top["file_path"],
+                    "symbol": top["name"],
+                    "kind": top["kind"],
+                    "layer": top.get("layer", "unknown"),
+                    "similarity": top["similarity"]
+                }
             
     # Run BFS trace if we have a seed file and need graph details
     if seed and tool_used in ("graph", "hybrid") and not no_match:
@@ -74,7 +172,7 @@ def execute(conn: sqlite3.Connection, embedder, decision: RouterDecision, layer_
     
     # Construct the canonical TraceResult payload
     return {
-        "query": decision.slm_raw, # We can override this at the API level with user query
+        "query": query_text,
         "routed_by": decision.routed_by,
         "tool_used": tool_used,
         "keywords": keywords,

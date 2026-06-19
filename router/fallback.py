@@ -9,7 +9,10 @@ STOPWORDS = {
     "where", "does", "what", "how", "is", "the", "a", "an", "in",
     "of", "to", "my", "our", "it", "if", "i", "change", "find",
     "show", "me", "and", "or", "which", "who", "when", "that",
-    "about", "your", "codebase", "project", "repo", "repository"
+    "about", "your", "codebase", "project", "repo", "repository",
+    "function", "class", "symbol", "module", "file", "directory",
+    "folder", "method", "variable", "code", "object", "component",
+    "handler", "service", "route", "package"
 }
 
 @dataclass

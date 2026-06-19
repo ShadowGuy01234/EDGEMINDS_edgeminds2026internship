@@ -5,7 +5,7 @@ from typing import Dict, Any
 
 from api.config import OLLAMA_BASE_URL, OLLAMA_MODEL
 from router.prompt import SYSTEM_PROMPT, build_user_turn
-from router.fallback import RouterDecision, fallback_route
+from router.fallback import RouterDecision, fallback_route, STOPWORDS
 
 def classify_query_rules(query: str) -> str:
     q = query.lower()
@@ -87,12 +87,18 @@ def call_ollama(query: str) -> RouterDecision:
             tool = classify_query_rules(query)
             
             if isinstance(keywords, list):
-                # Ensure keywords are string values
-                cleaned_keywords = [str(k) for k in keywords if k]
+                # Ensure keywords are string values and actually exist in the user's query
+                # (case-insensitive) to prevent the model from outputting generic prompt words.
+                q_lower = query.lower()
+                cleaned_keywords = []
+                for k in keywords:
+                    k_str = str(k).strip()
+                    if k_str and k_str.lower() in q_lower and k_str.lower() not in STOPWORDS:
+                        cleaned_keywords.append(k_str)
             else:
                 cleaned_keywords = []
                 
-            # If model returned no keywords, extract fallback keywords
+            # If model returned no keywords or only invalid ones, extract fallback keywords
             if not cleaned_keywords:
                 temp_fallback = fallback_route(query)
                 cleaned_keywords = temp_fallback.keywords
