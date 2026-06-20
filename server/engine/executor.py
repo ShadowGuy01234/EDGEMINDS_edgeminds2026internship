@@ -4,10 +4,10 @@ import os
 import re
 from typing import Dict, Any, List, Optional
 
-from router.fallback import RouterDecision
-from indexer.graph_query import graph_trace
-from indexer.vector_query import vector_search
-from indexer.db import HAS_VSS
+from server.router.fallback import RouterDecision
+from server.indexer.graph_query import graph_trace
+from server.indexer.vector_query import vector_search
+from server.indexer.db import HAS_VSS
 
 def find_seed_file_by_name(conn: sqlite3.Connection, query: str, keywords: List[str]) -> Optional[str]:
     """

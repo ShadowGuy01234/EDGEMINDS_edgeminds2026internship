@@ -5,10 +5,10 @@ import time
 import hashlib
 from typing import List, Dict, Any
 
-from parser.file_scanner import scan_repo
-from parser.python_parser import parse_python_file
-from parser.typescript_parser import parse_typescript_file
-from parser.layer_classifier import classify_layer
+from server.parser.file_scanner import scan_repo
+from server.parser.python_parser import parse_python_file
+from server.parser.typescript_parser import parse_typescript_file
+from server.parser.layer_classifier import classify_layer
 
 def ingest_repository(repo_path: str, output_dir: str) -> Dict[str, Any]:
     """

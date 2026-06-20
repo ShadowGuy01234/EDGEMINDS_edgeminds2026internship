@@ -3,8 +3,8 @@ import json
 import unittest
 from fastapi.testclient import TestClient
 
-from api.main import app
-from api.config import DB_PATH
+from server.api.main import app
+from server.api.config import DB_PATH
 
 class TestAPIEndpoints(unittest.TestCase):
     @classmethod

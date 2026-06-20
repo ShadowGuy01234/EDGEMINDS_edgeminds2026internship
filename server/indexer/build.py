@@ -4,10 +4,10 @@ import json
 import time
 from typing import Dict, Any
 
-from indexer.db import init_db
-from indexer.graph_builder import insert_nodes, insert_edges
-from indexer.vector_builder import insert_symbols
-from indexer import embedder
+from server.indexer.db import init_db
+from server.indexer.graph_builder import insert_nodes, insert_edges
+from server.indexer.vector_builder import insert_symbols
+from server.indexer import embedder
 
 def build_index(manifest_path: str, db_path: str) -> Dict[str, Any]:
     """
@@ -29,7 +29,7 @@ def build_index(manifest_path: str, db_path: str) -> Dict[str, Any]:
     print(f"Initializing SQLite database at: {db_path}")
     # init_db will connect to the SQLite DB and return the connection
     # It also sets HAS_VSS flag if sqlite-vss loaded successfully
-    from indexer.db import HAS_VSS
+    from server.indexer.db import HAS_VSS
     conn = init_db(db_path)
     has_vss = HAS_VSS
     print(f"SQLite database initialized (sqlite-vss support: {has_vss})")

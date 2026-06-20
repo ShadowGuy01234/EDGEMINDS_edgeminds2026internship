@@ -2,8 +2,8 @@ import unittest
 import sqlite3
 from unittest.mock import MagicMock, patch
 
-from engine.executor import execute
-from router.fallback import RouterDecision
+from server.engine.executor import execute
+from server.router.fallback import RouterDecision
 
 class TestQueryExecutor(unittest.TestCase):
     def setUp(self):
@@ -13,8 +13,8 @@ class TestQueryExecutor(unittest.TestCase):
     def tearDown(self):
         self.conn.close()
 
-    @patch("engine.executor.vector_search")
-    @patch("engine.executor.graph_trace")
+    @patch("server.engine.executor.vector_search")
+    @patch("server.engine.executor.graph_trace")
     def test_vector_only_path(self, mock_graph, mock_vector):
         # Decision: pure vector search
         decision = RouterDecision(
@@ -46,8 +46,8 @@ class TestQueryExecutor(unittest.TestCase):
         mock_graph.assert_not_called()
         mock_vector.assert_called_once()
 
-    @patch("engine.executor.vector_search")
-    @patch("engine.executor.graph_trace")
+    @patch("server.engine.executor.vector_search")
+    @patch("server.engine.executor.graph_trace")
     def test_graph_only_path(self, mock_graph, mock_vector):
         # Decision: graph traversal
         decision = RouterDecision(
@@ -80,8 +80,8 @@ class TestQueryExecutor(unittest.TestCase):
         mock_vector.assert_called_once_with(self.conn, self.embedder, ["config", "imports"], top_k=5, has_vss=False, layer_filter=None)
         mock_graph.assert_called_once_with(self.conn, "src/config.py", depth=3)
 
-    @patch("engine.executor.vector_search")
-    @patch("engine.executor.graph_trace")
+    @patch("server.engine.executor.vector_search")
+    @patch("server.engine.executor.graph_trace")
     def test_hybrid_path(self, mock_graph, mock_vector):
         # Decision: hybrid path
         decision = RouterDecision(
@@ -113,7 +113,7 @@ class TestQueryExecutor(unittest.TestCase):
         mock_vector.assert_called_once_with(self.conn, self.embedder, ["middleware"], top_k=10, has_vss=False, layer_filter=None)
         mock_graph.assert_called_once_with(self.conn, "src/middleware.py", depth=3)
 
-    @patch("engine.executor.vector_search")
+    @patch("server.engine.executor.vector_search")
     def test_no_match_scenario(self, mock_vector):
         # Decision: vector search with no matches
         decision = RouterDecision(
@@ -135,7 +135,7 @@ class TestQueryExecutor(unittest.TestCase):
         self.assertEqual(res["dependents"], [])
         self.assertEqual(res["dependencies"], [])
 
-    @patch("engine.executor.vector_search")
+    @patch("server.engine.executor.vector_search")
     def test_layer_aware_execution(self, mock_vector):
         decision = RouterDecision(
             tool="vector",

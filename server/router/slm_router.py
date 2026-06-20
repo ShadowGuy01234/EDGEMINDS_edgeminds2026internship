@@ -3,9 +3,9 @@ import json
 import time
 from typing import Dict, Any
 
-from api.config import OLLAMA_BASE_URL, OLLAMA_MODEL
-from router.prompt import SYSTEM_PROMPT, build_user_turn
-from router.fallback import RouterDecision, fallback_route, STOPWORDS
+from server.api.config import OLLAMA_BASE_URL, OLLAMA_MODEL
+from server.router.prompt import SYSTEM_PROMPT, build_user_turn
+from server.router.fallback import RouterDecision, fallback_route, STOPWORDS
 
 def classify_query_rules(query: str) -> str:
     q = query.lower()

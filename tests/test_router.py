@@ -1,7 +1,7 @@
 import os
 import json
 import unittest
-from router.slm_router import call_ollama
+from server.router.slm_router import call_ollama
 
 class TestRouterAccuracy(unittest.TestCase):
     def test_routing_accuracy_gate(self):

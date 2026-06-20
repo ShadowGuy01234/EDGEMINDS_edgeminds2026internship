@@ -2,9 +2,9 @@ import unittest
 import sqlite3
 import json
 
-from indexer.db import init_db
-from indexer.vector_query import vector_search
-from indexer import embedder
+from server.indexer.db import init_db
+from server.indexer.vector_query import vector_search
+from server.indexer import embedder
 
 class TestVectorQueries(unittest.TestCase):
     @classmethod

@@ -4,11 +4,11 @@ import json
 import os
 import tempfile
 
-from parser.layer_classifier import classify_layer
-from indexer.vector_query import vector_search
-from indexer.db import init_db
-from indexer.vector_builder import insert_symbols
-from indexer.graph_builder import insert_nodes
+from server.parser.layer_classifier import classify_layer
+from server.indexer.vector_query import vector_search
+from server.indexer.db import init_db
+from server.indexer.vector_builder import insert_symbols
+from server.indexer.graph_builder import insert_nodes
 
 class MockEmbedder:
     def embed(self, text):

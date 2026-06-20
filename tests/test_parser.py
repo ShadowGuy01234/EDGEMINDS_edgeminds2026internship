@@ -3,10 +3,10 @@ import tempfile
 import json
 import unittest
 
-from parser.python_parser import parse_python_file
-from parser.typescript_parser import parse_typescript_file
-from parser.file_scanner import scan_repo
-from parser.ingest import ingest_repository
+from server.parser.python_parser import parse_python_file
+from server.parser.typescript_parser import parse_typescript_file
+from server.parser.file_scanner import scan_repo
+from server.parser.ingest import ingest_repository
 
 class TestASTParsers(unittest.TestCase):
     def setUp(self):

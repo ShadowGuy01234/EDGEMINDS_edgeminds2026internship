@@ -2,8 +2,8 @@ import unittest
 import sqlite3
 import json
 
-from indexer.db import init_db
-from indexer.graph_query import graph_trace
+from server.indexer.db import init_db
+from server.indexer.graph_query import graph_trace
 
 class TestGraphQueries(unittest.TestCase):
     def setUp(self):
@@ -82,7 +82,7 @@ class TestGraphQueries(unittest.TestCase):
         self.assertFalse(res["depth_capped"])
 
     def test_resolve_import_path_javascript(self):
-        from indexer.graph_builder import resolve_import_path
+        from server.indexer.graph_builder import resolve_import_path
         known_paths = {
             "backend/src/middleware/auth.js",
             "backend/src/utils/jwt.js",

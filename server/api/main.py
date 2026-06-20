@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from api.config import (
+from server.api.config import (
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
     DB_PATH,
@@ -18,13 +18,13 @@ from api.config import (
     FRONTEND_STATIC_DIR,
     ENV
 )
-from indexer.db import init_db, get_connection
-from indexer import embedder
-from parser.ingest import ingest_repository
-from indexer.build import build_index
-from router.slm_router import call_ollama
-from engine.executor import execute
-from retriever.raw_slicer import get_raw_source_slice
+from server.indexer.db import init_db, get_connection
+from server.indexer import embedder
+from server.parser.ingest import ingest_repository
+from server.indexer.build import build_index
+from server.router.slm_router import call_ollama
+from server.engine.executor import execute
+from server.retriever.raw_slicer import get_raw_source_slice
 
 # Initialize FastAPI App
 app = FastAPI(
