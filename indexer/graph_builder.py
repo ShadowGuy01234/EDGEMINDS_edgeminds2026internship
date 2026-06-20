@@ -14,8 +14,8 @@ def insert_nodes(conn: sqlite3.Connection, blueprints: List[Dict[str, Any]]):
     for bp in blueprints:
         cursor.execute(
             """
-            INSERT OR REPLACE INTO nodes (file_path, language, functions, classes, exports, layer)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO nodes (file_path, language, functions, classes, exports, layer, file_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 bp["file_path"],
@@ -23,7 +23,8 @@ def insert_nodes(conn: sqlite3.Connection, blueprints: List[Dict[str, Any]]):
                 json.dumps(bp.get("functions", [])),
                 json.dumps(bp.get("classes", [])),
                 json.dumps(bp.get("exports", [])),
-                bp.get("layer", "unknown")
+                bp.get("layer", "unknown"),
+                bp.get("file_hash")
             )
         )
     conn.commit()

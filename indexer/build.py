@@ -58,7 +58,9 @@ def build_index(manifest_path: str, db_path: str) -> Dict[str, Any]:
     
     cursor.execute("SELECT COUNT(*) FROM symbols")
     symbol_count = cursor.fetchone()[0]
-    
+
+
+
     conn.close()
     
     duration_ms = int((time.time() - start_time) * 1000)

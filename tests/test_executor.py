@@ -77,7 +77,7 @@ class TestQueryExecutor(unittest.TestCase):
         self.assertEqual(len(res["dependents"]), 1)
         self.assertEqual(res["dependents"][0]["file_path"], "src/app.py")
         
-        mock_vector.assert_called_once_with(self.conn, self.embedder, ["config", "imports"], top_k=1, has_vss=False, layer_filter=None)
+        mock_vector.assert_called_once_with(self.conn, self.embedder, ["config", "imports"], top_k=5, has_vss=False, layer_filter=None)
         mock_graph.assert_called_once_with(self.conn, "src/config.py", depth=3)
 
     @patch("engine.executor.vector_search")

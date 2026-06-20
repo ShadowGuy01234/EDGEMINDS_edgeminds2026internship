@@ -51,7 +51,8 @@ def init_db(db_path: str) -> sqlite3.Connection:
         functions TEXT,   -- JSON array of strings
         classes TEXT,     -- JSON array of strings
         exports TEXT,     -- JSON array of strings
-        layer TEXT DEFAULT 'unknown'
+        layer TEXT DEFAULT 'unknown',
+        file_hash TEXT
     )
     """)
     
@@ -77,7 +78,9 @@ def init_db(db_path: str) -> sqlite3.Connection:
         kind TEXT NOT NULL,  -- 'function' | 'class' | 'export'
         language TEXT NOT NULL,
         layer TEXT DEFAULT 'unknown',
-        embedding TEXT       -- JSON array of floats (used as fallback vector index)
+        embedding TEXT,      -- JSON array of floats (used as fallback vector index)
+        start_line INTEGER,
+        end_line INTEGER
     )
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)")
@@ -120,7 +123,22 @@ def init_db(db_path: str) -> sqlite3.Connection:
         pass
         
     try:
+        cursor.execute("ALTER TABLE nodes ADD COLUMN file_hash TEXT")
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
         cursor.execute("ALTER TABLE symbols ADD COLUMN layer TEXT DEFAULT 'unknown'")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE symbols ADD COLUMN start_line INTEGER")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE symbols ADD COLUMN end_line INTEGER")
     except sqlite3.OperationalError:
         pass
         

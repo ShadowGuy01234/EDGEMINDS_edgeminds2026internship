@@ -1,6 +1,55 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { streamSymbolExplanation } from "../api";
+
+// Function to clean up SLM markdown quirks (Setext headers)
+const sanitizeMarkdown = (text) => {
+  if (!text) return "";
+  // Remove lines that are just equal signs (Setext H1) or dashes (Setext H2)
+  return text
+    .replace(/(^|\n)[=]{3,}\s*(\n|$)/g, '\n')
+    .replace(/(^|\n)[-]{3,}\s*(\n|$)/g, '\n');
+};
 
 export default function TracePanel({ trace, isLoading, explanation, isStreamingExplanation }) {
+  const [activeSymbol, setActiveSymbol] = useState(null);
+  const [streamedText, setStreamedText] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+
+  useEffect(() => {
+    setActiveSymbol(null);
+    setStreamedText("");
+    setIsStreaming(false);
+  }, [trace]);
+
+  const handleExplainClick = async (symbol) => {
+    const symbolKey = `${symbol.file_path}::${symbol.name}::${symbol.kind}`;
+    if (activeSymbol === symbolKey) {
+      setActiveSymbol(null);
+      setStreamedText("");
+      setIsStreaming(false);
+      return;
+    }
+
+    setActiveSymbol(symbolKey);
+    setStreamedText("");
+    setIsStreaming(true);
+
+    streamSymbolExplanation(
+      symbol,
+      (chunk) => {
+        setStreamedText((prev) => prev + chunk);
+      },
+      () => {
+        setIsStreaming(false);
+      },
+      (err) => {
+        console.error("Symbol explanation stream error:", err);
+        setStreamedText(`Failed to generate code explanation: ${err.message}`);
+        setIsStreaming(false);
+      }
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="flex-1 h-full flex flex-col items-center justify-center text-center p-8 bg-zinc-950/20">
@@ -198,22 +247,22 @@ export default function TracePanel({ trace, isLoading, explanation, isStreamingE
             </div>
 
             {/* Column 2: Anchor Seed Card */}
-            <div className="flex flex-col items-center justify-center min-h-[250px]">
+            <div className="flex flex-col items-center justify-center min-h-[250px] max-h-[450px]">
               {trace.seed ? (
-                <div className="glass-panel border-violet-500/30 bg-violet-950/5 p-6 rounded-xl w-full text-center relative glow-violet border-2 flex flex-col justify-center items-center py-8">
+                <div className="glass-panel border-violet-500/30 bg-violet-950/5 p-5 rounded-xl w-full text-center relative glow-violet border-2 flex flex-col justify-start items-center py-6 overflow-y-auto max-h-[450px]">
                   {/* Connector Line visuals */}
                   <div className="absolute left-0 top-1/2 w-4 border-t border-dashed border-violet-500/40 transform -translate-x-full hidden lg:block" />
                   <div className="absolute right-0 top-1/2 w-4 border-t border-dashed border-violet-500/40 transform translate-x-full hidden lg:block" />
 
-                  <span className="text-[9px] font-mono font-bold text-violet-400 uppercase tracking-widest px-2 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/30 mb-3">
+                  <span className="text-[9px] font-mono font-bold text-violet-400 uppercase tracking-widest px-2 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/30 mb-3 shrink-0">
                     Anchor Seed
                   </span>
 
-                  <h4 className="text-lg font-bold text-white mb-1 tracking-tight break-all">
+                  <h4 className="text-lg font-bold text-white mb-1 tracking-tight break-all shrink-0">
                     {trace.seed.symbol || trace.seed.file_path.split("/").pop()}
                   </h4>
 
-                  <div className="flex items-center justify-center space-x-2 mb-4">
+                  <div className="flex items-center justify-center space-x-2 mb-4 shrink-0">
                     <span className={`text-[10px] font-mono px-2 py-0.5 rounded border inline-block ${getKindBadgeColor(trace.seed.kind)}`}>
                       {trace.seed.kind || "file"}
                     </span>
@@ -224,15 +273,17 @@ export default function TracePanel({ trace, isLoading, explanation, isStreamingE
                     )}
                   </div>
 
-                  <div className="text-zinc-400 font-mono text-xs w-full text-center truncate px-4">
+                  <div className="text-zinc-400 font-mono text-xs w-full text-center truncate px-4 shrink-0">
                     <span className="text-zinc-600">File:</span> {trace.seed.file_path}
                   </div>
 
                   {trace.seed.similarity !== undefined && (
-                    <div className="mt-3 text-[10px] font-mono text-zinc-500">
+                    <div className="mt-3 text-[10px] font-mono text-zinc-500 shrink-0">
                       Similarity: <span className="text-violet-400 font-bold">{(trace.seed.similarity * 100).toFixed(1)}%</span>
                     </div>
                   )}
+
+
                 </div>
               ) : (
                 <div className="glass-panel rounded-xl p-6 w-full text-center">
@@ -302,38 +353,74 @@ export default function TracePanel({ trace, isLoading, explanation, isStreamingE
               </div>
             ) : (
               <div className="divide-y divide-zinc-900/60">
-                {trace.symbol_matches.map((match, idx) => (
-                  <div 
-                    key={idx} 
-                    className="p-3.5 flex items-center justify-between hover:bg-zinc-900/20 transition-colors"
-                  >
-                    <div className="min-w-0 pr-4">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <span className="text-sm font-semibold font-mono text-zinc-100 truncate block">
-                          {match.name}
-                        </span>
-                        <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border font-medium uppercase ${getKindBadgeColor(match.kind)}`}>
-                          {match.kind}
-                        </span>
-                        {match.layer && (
-                          <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border font-medium uppercase ${getLayerBadgeColor(match.layer)}`}>
-                            {match.layer}
+                {trace.symbol_matches.map((match, idx) => {
+                  const symbolKey = `${match.file_path}::${match.name}::${match.kind}`;
+                  const isStreamActive = activeSymbol === symbolKey;
+                  return (
+                    <div 
+                      key={idx} 
+                      className={`transition-colors duration-150 ${isStreamActive ? 'bg-zinc-900/40' : 'hover:bg-zinc-900/20'}`}
+                    >
+                      <div 
+                        onClick={() => handleExplainClick(match)}
+                        className="p-3.5 flex items-center justify-between select-none cursor-pointer"
+                      >
+                        <div className="min-w-0 pr-4">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <span className="text-sm font-semibold font-mono text-zinc-100 truncate block">
+                              {match.name}
+                            </span>
+                            <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border font-medium uppercase ${getKindBadgeColor(match.kind)}`}>
+                              {match.kind}
+                            </span>
+                            {match.layer && (
+                              <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border font-medium uppercase ${getLayerBadgeColor(match.layer)}`}>
+                                {match.layer}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-zinc-400 font-mono block truncate">
+                            {getFileIcon(match.file_path)} {match.file_path}
                           </span>
-                        )}
-                      </div>
-                      <span className="text-xs text-zinc-400 font-mono block truncate">
-                        {getFileIcon(match.file_path)} {match.file_path}
-                      </span>
-                    </div>
+                        </div>
 
-                    <div className="text-right shrink-0">
-                      <div className="text-xs font-mono font-bold text-violet-400">
-                        {(match.similarity * 100).toFixed(1)}%
+                        <div className="flex items-center space-x-4 shrink-0">
+                          <div className="text-right">
+                            <div className="text-xs font-mono font-bold text-violet-400">
+                              {(match.similarity * 100).toFixed(1)}%
+                            </div>
+                            <span className="text-[9px] text-zinc-500 font-mono">similarity</span>
+                          </div>
+                          <svg 
+                            className={`w-4 h-4 text-zinc-500 transition-transform duration-200 ${isStreamActive ? 'rotate-90 text-violet-400' : ''}`} 
+                            fill="none" 
+                            viewBox="0 0 24 24" 
+                            stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
                       </div>
-                      <span className="text-[9px] text-zinc-500 font-mono">similarity</span>
+
+                      {isStreamActive && (
+                        <div className="px-4 pb-4 border-t border-zinc-900/50 pt-3 animate-[fadeIn_0.2s_ease-out] text-left">
+                          <div className="bg-zinc-950/60 p-4 rounded-lg border border-zinc-800/40 shadow-inner">
+                            <span className="text-[10px] font-mono font-bold text-violet-400 uppercase tracking-widest block mb-2">Code Explanation (On-Demand RAG)</span>
+                            <pre className="text-xs text-zinc-300 font-sans leading-relaxed whitespace-pre-wrap">
+                              {sanitizeMarkdown(streamedText)}
+                              {isStreaming && (
+                                <span className="inline-block w-1.5 h-3.5 ml-1 bg-violet-400 animate-pulse align-middle" />
+                              )}
+                            </pre>
+                            {isStreaming && !streamedText && (
+                              <p className="text-[10px] text-zinc-500 font-mono mt-1 animate-pulse">Generating explanation...</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

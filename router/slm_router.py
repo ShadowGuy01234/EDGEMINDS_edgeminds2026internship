@@ -58,8 +58,8 @@ def call_ollama(query: str) -> RouterDecision:
     
     raw_content = ""
     try:
-        # Increased to 10.0 seconds to prevent timeouts on slower machines
-        with httpx.Client(timeout=10.0) as client:
+        # Increased to 50.0 seconds to prevent timeouts on slower machines
+        with httpx.Client(timeout=50.0) as client:
             response = client.post(url, json=payload)
             
         latency_ms = int((time.time() - start_time) * 1000)

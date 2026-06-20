@@ -4,7 +4,7 @@ import json
 import httpx
 import time
 from typing import Dict, Any
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -24,6 +24,7 @@ from parser.ingest import ingest_repository
 from indexer.build import build_index
 from router.slm_router import call_ollama
 from engine.executor import execute
+from retriever.raw_slicer import get_raw_source_slice
 
 # Initialize FastAPI App
 app = FastAPI(
@@ -121,7 +122,7 @@ app.add_middleware(
 
 # API Endpoints
 @app.post("/ingest")
-def ingest(payload: IngestRequest, db: sqlite3.Connection = Depends(get_db)):
+def ingest(payload: IngestRequest, background_tasks: BackgroundTasks, db: sqlite3.Connection = Depends(get_db)):
     """
     Triggers repository scanning and index building for a repository path.
     """
@@ -152,6 +153,7 @@ def ingest(payload: IngestRequest, db: sqlite3.Connection = Depends(get_db)):
     cursor = db.cursor()
     cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('repo_path', ?)", (repo_path,))
     db.commit()
+
     
     total_time = parser_res["duration_ms"] + build_res["duration_ms"]
     return {
@@ -443,6 +445,106 @@ async def explain_query(payload: ExplainRequest):
                 yield f"Error generating explanation: {str(e)}"
                  
     return StreamingResponse(stream_generator(), media_type="text/plain")
+
+
+class SymbolRequest(BaseModel):
+    file_path: str
+    symbol_name: str
+    kind: str
+
+@app.post("/symbol/explain")
+def explain_symbol(payload: SymbolRequest, db: sqlite3.Connection = Depends(get_db)):
+    """
+    On-demand, streaming explanation of a specific symbol inside a file.
+    Streams back a Markdown-formatted explanation.
+    """
+    cursor = db.cursor()
+    cursor.execute(
+        "SELECT start_line, end_line, language FROM symbols WHERE file_path = ? AND name = ? AND kind = ?",
+        (payload.file_path, payload.symbol_name, payload.kind)
+    )
+    row = cursor.fetchone()
+    if not row:
+        cursor.execute(
+            "SELECT start_line, end_line, language FROM symbols WHERE file_path = ? AND name = ?",
+            (payload.file_path, payload.symbol_name)
+        )
+        row = cursor.fetchone()
+        
+    start_line, end_line, language = row if row else (None, None, "python")
+    
+    cursor.execute("SELECT value FROM settings WHERE key = 'repo_path'")
+    repo_row = cursor.fetchone()
+    repo_path = repo_row[0] if repo_row else ""
+    full_path = os.path.join(repo_path, payload.file_path) if repo_path else payload.file_path
+    
+    code = get_raw_source_slice(full_path, start_line, end_line)
+    
+    prompt = f"""You are an expert code analyst. Explain the following {payload.kind} named `{payload.symbol_name}`.
+
+Source Code:
+```{language}
+{code}
+```
+
+Provide a concise explanation using STRICT standard Markdown. 
+Use ATX headers (e.g., `## Purpose`). 
+DO NOT use Setext headers (DO NOT underline text with `===` or `---`).
+DO NOT wrap headers in bold asterisks.
+
+## Purpose
+[What this code does]
+
+## Key Logic
+[Step-by-step breakdown]
+
+## Context
+[How it fits into the file/module]
+"""
+    
+    system_instruction = "You are a precise codebase search assistant. Explain the code in clear, concise Markdown. Do NOT use JSON."
+    
+    async def event_generator():
+        url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
+        ollama_payload = {
+            "model": OLLAMA_MODEL,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt}
+            ],
+            "options": {
+                "temperature": 0.1,
+                "num_predict": 400,
+                "num_ctx": 4096
+            },
+            "stream": True
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                async with client.stream("POST", url, json=ollama_payload) as response:
+                    if response.status_code != 200:
+                        err_text = f"Ollama HTTP error {response.status_code}"
+                        yield f"data: {json.dumps({'error': err_text})}\n\n"
+                        yield "data: [DONE]\n\n"
+                        return
+                        
+                    async for chunk in response.aiter_text():
+                        for line in chunk.split("\n"):
+                            if line.strip():
+                                try:
+                                    data = json.loads(line)
+                                    content = data.get("message", {}).get("content", "")
+                                    if content:
+                                        yield f"data: {json.dumps({'chunk': content})}\n\n"
+                                except Exception:
+                                    pass
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            
+        yield "data: [DONE]\n\n"
+        
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # Serve static files if FRONTEND_STATIC_DIR is provided

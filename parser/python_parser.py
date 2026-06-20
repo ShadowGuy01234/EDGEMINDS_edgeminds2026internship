@@ -24,6 +24,9 @@ def parse_python_file(file_path: str, repo_path: str = "") -> Dict[str, Any]:
     
     # Track imports by module to merge duplicates
     imports_by_module: Dict[str, set] = {}
+    
+    # Track symbol line ranges (1-indexed)
+    symbol_line_spans: Dict[str, Dict[str, int]] = {}
 
     def extract_dotted_name(node) -> str:
         return node.text.decode("utf8").strip()
@@ -116,6 +119,14 @@ def parse_python_file(file_path: str, repo_path: str = "") -> Dict[str, Any]:
                 # Public functions (not starting with _) are exports
                 if not func_name.startswith("_"):
                     exports.append(func_name)
+                
+                # Record line range (1-indexed)
+                start_line = node.start_point[0] + 1
+                end_line = node.end_point[0] + 1
+                symbol_line_spans[func_name] = {
+                    "start_line": start_line,
+                    "end_line": end_line
+                }
             # Traverse function children (to look for nested functions/classes, though we usually care about top-level mostly)
             # Let's traverse only children that are not the block body to avoid extracting local functions.
             # Spec says "function_definition (name only), class_definition (name only)".
@@ -137,6 +148,14 @@ def parse_python_file(file_path: str, repo_path: str = "") -> Dict[str, Any]:
                 # Public classes are exports
                 if not class_name.startswith("_"):
                     exports.append(class_name)
+                
+                # Record line range (1-indexed)
+                start_line = node.start_point[0] + 1
+                end_line = node.end_point[0] + 1
+                symbol_line_spans[class_name] = {
+                    "start_line": start_line,
+                    "end_line": end_line
+                }
             # Traverse class body to extract methods (functions inside class)
             body_node = node.child_by_field_name("body")
             if body_node:
@@ -166,7 +185,8 @@ def parse_python_file(file_path: str, repo_path: str = "") -> Dict[str, Any]:
         "imports": imports,
         "exports": exports,
         "functions": functions,
-        "classes": classes
+        "classes": classes,
+        "symbol_line_spans": symbol_line_spans
     }
 
 if __name__ == "__main__":

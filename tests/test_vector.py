@@ -25,7 +25,10 @@ class TestVectorQueries(unittest.TestCase):
             kind TEXT NOT NULL,
             language TEXT NOT NULL,
             layer TEXT DEFAULT 'unknown',
-            embedding TEXT
+            embedding TEXT,
+            purpose TEXT,
+            trigger TEXT,
+            key_behavior TEXT
         )
         """)
         

@@ -27,6 +27,9 @@ def parse_typescript_file(file_path: str, repo_path: str = "") -> Dict[str, Any]
     exports: List[str] = []
     
     imports_by_module: Dict[str, set] = {}
+    
+    # Track symbol line ranges (1-indexed)
+    symbol_line_spans: Dict[str, Dict[str, int]] = {}
 
     def extract_string_literal(node) -> str:
         text = node.text.decode("utf8").strip()
@@ -111,6 +114,13 @@ def parse_typescript_file(file_path: str, repo_path: str = "") -> Dict[str, Any]
                 if var_name:
                     if is_func:
                         functions.append(var_name)
+                        # Record line range (1-indexed)
+                        start_line = node.start_point[0] + 1
+                        end_line = node.end_point[0] + 1
+                        symbol_line_spans[var_name] = {
+                            "start_line": start_line,
+                            "end_line": end_line
+                        }
                     if is_exported:
                         exports.append(var_name)
 
@@ -137,6 +147,14 @@ def parse_typescript_file(file_path: str, repo_path: str = "") -> Dict[str, Any]
                     name = name_node.text.decode("utf8").strip()
                     classes.append(name)
                     exports.append("default" if is_default else name)
+                    
+                    # Record line range (1-indexed)
+                    start_line = child.start_point[0] + 1
+                    end_line = child.end_point[0] + 1
+                    symbol_line_spans[name] = {
+                        "start_line": start_line,
+                        "end_line": end_line
+                    }
             elif child.type == "function_declaration":
                 # Find function name
                 name_node = None
@@ -148,6 +166,14 @@ def parse_typescript_file(file_path: str, repo_path: str = "") -> Dict[str, Any]
                     name = name_node.text.decode("utf8").strip()
                     functions.append(name)
                     exports.append("default" if is_default else name)
+                    
+                    # Record line range (1-indexed)
+                    start_line = child.start_point[0] + 1
+                    end_line = child.end_point[0] + 1
+                    symbol_line_spans[name] = {
+                        "start_line": start_line,
+                        "end_line": end_line
+                    }
             elif child.type == "lexical_declaration":
                 process_lexical_declaration(child, is_exported=True)
             elif child.type == "export_specifier":
@@ -183,6 +209,14 @@ def parse_typescript_file(file_path: str, repo_path: str = "") -> Dict[str, Any]
             if name_node:
                 func_name = name_node.text.decode("utf8").strip()
                 functions.append(func_name)
+                
+                # Record line range (1-indexed)
+                start_line = node.start_point[0] + 1
+                end_line = node.end_point[0] + 1
+                symbol_line_spans[func_name] = {
+                    "start_line": start_line,
+                    "end_line": end_line
+                }
             # Skip function body
             for child in node.children:
                 if child.type != "statement_block":
@@ -199,6 +233,14 @@ def parse_typescript_file(file_path: str, repo_path: str = "") -> Dict[str, Any]
             if name_node:
                 class_name = name_node.text.decode("utf8").strip()
                 classes.append(class_name)
+                
+                # Record line range (1-indexed)
+                start_line = node.start_point[0] + 1
+                end_line = node.end_point[0] + 1
+                symbol_line_spans[class_name] = {
+                    "start_line": start_line,
+                    "end_line": end_line
+                }
             # Traverse class body for class methods
             body_node = None
             for child in node.children:
@@ -222,6 +264,14 @@ def parse_typescript_file(file_path: str, repo_path: str = "") -> Dict[str, Any]
             if name_node:
                 method_name = name_node.text.decode("utf8").strip()
                 functions.append(method_name)
+                
+                # Record line range (1-indexed)
+                start_line = node.start_point[0] + 1
+                end_line = node.end_point[0] + 1
+                symbol_line_spans[method_name] = {
+                    "start_line": start_line,
+                    "end_line": end_line
+                }
             # Skip method body
             for child in node.children:
                 if child.type != "statement_block":
@@ -253,7 +303,8 @@ def parse_typescript_file(file_path: str, repo_path: str = "") -> Dict[str, Any]
         "imports": imports,
         "exports": exports,
         "functions": functions,
-        "classes": classes
+        "classes": classes,
+        "symbol_line_spans": symbol_line_spans
     }
 
 if __name__ == "__main__":

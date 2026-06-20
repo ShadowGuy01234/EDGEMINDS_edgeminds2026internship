@@ -2,6 +2,7 @@ import os
 import argparse
 import json
 import time
+import hashlib
 from typing import List, Dict, Any
 
 from parser.file_scanner import scan_repo
@@ -49,6 +50,11 @@ def ingest_repository(repo_path: str, output_dir: str) -> Dict[str, Any]:
     for rel_path in files:
         ext = os.path.splitext(rel_path)[1].lower()
         try:
+            full_path = os.path.join(repo_path, rel_path)
+            with open(full_path, "rb") as f:
+                file_bytes = f.read()
+            file_hash = hashlib.sha256(file_bytes).hexdigest()
+            
             if ext == ".py":
                 blueprint = parse_python_file(rel_path, repo_path)
             elif ext in (".ts", ".tsx", ".js", ".jsx"):
@@ -56,6 +62,7 @@ def ingest_repository(repo_path: str, output_dir: str) -> Dict[str, Any]:
             else:
                 continue
                 
+            blueprint["file_hash"] = file_hash
             blueprint["layer"] = classify_layer(rel_path)
             blueprints.append(blueprint)
             total_functions += len(blueprint.get("functions", []))
