@@ -6,11 +6,13 @@ CodeGenome-Edge is a local-only, offline-first codebase intelligence tool design
 
 ## Key Features
 
-1.  **AST-Based Blueprints**: Lightweight parser utilizing `tree-sitter` to parse Python and TypeScript structure while discarding function bodies and implementation logic.
-2.  **Dual-Index Store**: A local SQLite database mapping code files as a structural import graph alongside semantic symbol indexes.
-3.  **Local SLM Query Routing**: Uses a local Ollama instance running `llama3.2:1b` as a deterministic classifier to extract search intent and keywords.
+1.  **AST-Based Blueprints**: Lightweight parser utilizing `tree-sitter` to parse Python and TypeScript structure, extracting imports, exports, functions, classes, and lines metadata.
+2.  **Dual-Index Store**: A local SQLite database mapping files as a structural import graph alongside semantic symbol definitions.
+3.  **Local SLM Query Routing**: Uses a local Ollama instance running `llama3.2:1b` to extract search intent, parameters, and keywords.
 4.  **Deterministic Search Engine**: Breadth-First Search (BFS) graph execution up to 3 hops (upstream dependents and downstream dependencies) combined with vector search.
-5.  **Interactive Web Dashboard**: React frontend dashboard displaying file traces, history replays, status metrics (Ollama status & active memory footprint), and natural language code explanations.
+5.  **Graph-Enriched Explanations**: Automatically extracts function signatures and docstrings to inject callers and callees as context-augmented RAG data for on-demand symbol explanations.
+6.  **"Blast Radius" Impact Analysis**: Traces 3-hop dependent files via BFS and runs SLM summarization to determine modification risks and testing scenarios.
+7.  **Interactive Web Dashboard**: React frontend dashboard displaying file traces, dynamic tabbed symbol panels (Explanation / Blast Radius), status metrics, and memory footprints.
 
 ---
 
@@ -82,13 +84,13 @@ ENV=dev
 
 > [!IMPORTANT]
 > **Working Directory Warning:** You **MUST** run the backend server from the **repository root directory** (`d:\repo\Edge_minds`). 
-> If you change directories into the `api/` folder and run from there, python will fail to resolve packages and throw: `ModuleNotFoundError: No module named 'api'`.
+> If you run `python -m uvicorn api.main:app`, python will fail to resolve the package and throw: `ModuleNotFoundError: No module named 'api'`.
 
 #### Correct Start Command (From Repository Root)
 Run the FastAPI backend using `python -m uvicorn`:
 ```bash
 # Verify you are at d:\repo\Edge_minds
-python -m uvicorn api.main:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 #### Verifying Backend Startup
@@ -121,11 +123,11 @@ To query a codebase, you must first ingest it to parse the AST elements and buil
 
 ### 6. Common Issues & Troubleshooting
 
-#### 1. `ModuleNotFoundError: No module named 'api'`
-*   **Cause**: You ran the `uvicorn` command inside the `api/` directory.
+#### 1. `ModuleNotFoundError: No module named 'api'` or `ModuleNotFoundError: No module named 'server'`
+*   **Cause**: You specified the wrong module name or ran the `uvicorn` command inside the wrong directory.
 *   **Fix**: Return to the repository root directory (`d:\repo\Edge_minds`) and run:
     ```bash
-    python -m uvicorn api.main:app --host 127.0.0.1 --port 8000 --reload
+    python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000 --reload
     ```
 
 #### 2. `ollama_reachable: false` or Warning on Startup

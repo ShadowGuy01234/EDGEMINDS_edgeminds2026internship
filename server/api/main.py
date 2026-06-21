@@ -141,18 +141,18 @@ def ingest(payload: IngestRequest, background_tasks: BackgroundTasks, db: sqlite
             detail=f"Parsing failed: {parser_res.get('message', 'Unknown error')}"
         )
         
+    # Save the repo path to settings table first
+    cursor = db.cursor()
+    cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('repo_path', ?)", (repo_path,))
+    db.commit()
+        
     # Run DB index builder
-    build_res = build_index("./index/manifest.json", DB_PATH)
+    build_res = build_index("./index/manifest.json", DB_PATH, repo_path=repo_path)
     if build_res.get("status") != "success":
         raise HTTPException(
             status_code=500,
             detail="Database indexing failed"
         )
-        
-    # Save the repo path to settings table
-    cursor = db.cursor()
-    cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('repo_path', ?)", (repo_path,))
-    db.commit()
 
     
     total_time = parser_res["duration_ms"] + build_res["duration_ms"]
@@ -480,12 +480,57 @@ def explain_symbol(payload: SymbolRequest, db: sqlite3.Connection = Depends(get_
     
     code = get_raw_source_slice(full_path, start_line, end_line)
     
+    # Query importing files' symbols (callers)
+    cursor.execute(
+        """
+        SELECT name, file_path, signature, summary FROM symbols 
+        WHERE file_path IN (SELECT source_file FROM edges WHERE target_name = ? AND import_type = 'internal')
+        AND signature IS NOT NULL AND signature != ''
+        LIMIT 5
+        """,
+        (payload.file_path,)
+    )
+    caller_symbols = cursor.fetchall()
+    
+    # Query imported files' symbols (callees)
+    cursor.execute(
+        """
+        SELECT name, file_path, signature, summary FROM symbols 
+        WHERE file_path IN (SELECT target_name FROM edges WHERE source_file = ? AND import_type = 'internal')
+        AND signature IS NOT NULL AND signature != ''
+        LIMIT 5
+        """,
+        (payload.file_path,)
+    )
+    callee_symbols = cursor.fetchall()
+    
+    # Format related context
+    context_sections = []
+    if caller_symbols:
+        context_sections.append("Immediate Callers (symbols in files importing this file):")
+        for name, file, sig, sum_text in caller_symbols:
+            sum_str = f" - {sum_text}" if sum_text else ""
+            context_sections.append(f"- `{name}` in `{file}`")
+            context_sections.append(f"  Signature: `{sig}`{sum_str}")
+            
+    if callee_symbols:
+        context_sections.append("Immediate Callees (symbols in files imported by this file):")
+        for name, file, sig, sum_text in callee_symbols:
+            sum_str = f" - {sum_text}" if sum_text else ""
+            context_sections.append(f"- `{name}` in `{file}`")
+            context_sections.append(f"  Signature: `{sig}`{sum_str}")
+            
+    call_context = "\n".join(context_sections) if context_sections else "No direct caller or callee file relations resolved."
+    
     prompt = f"""You are an expert code analyst. Explain the following {payload.kind} named `{payload.symbol_name}`.
 
 Source Code:
 ```{language}
 {code}
 ```
+
+Call Graph Context (immediate callers/callees from related files):
+{call_context}
 
 Provide a concise explanation using STRICT standard Markdown. 
 Use ATX headers (e.g., `## Purpose`). 
@@ -499,7 +544,7 @@ DO NOT wrap headers in bold asterisks.
 [Step-by-step breakdown]
 
 ## Context
-[How it fits into the file/module]
+[How it fits into the file/module, including its relationship to callers/callees]
 """
     
     system_instruction = "You are a precise codebase search assistant. Explain the code in clear, concise Markdown. Do NOT use JSON."
@@ -520,6 +565,73 @@ DO NOT wrap headers in bold asterisks.
             "stream": True
         }
         
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                async with client.stream("POST", url, json=ollama_payload) as response:
+                    if response.status_code != 200:
+                        err_text = f"Ollama HTTP error {response.status_code}"
+                        yield f"data: {json.dumps({'error': err_text})}\n\n"
+                        yield "data: [DONE]\n\n"
+                        return
+                        
+                    async for chunk in response.aiter_text():
+                        for line in chunk.split("\n"):
+                            if line.strip():
+                                try:
+                                    data = json.loads(line)
+                                    content = data.get("message", {}).get("content", "")
+                                    if content:
+                                        yield f"data: {json.dumps({'chunk': content})}\n\n"
+                                except Exception:
+                                    pass
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            
+        yield "data: [DONE]\n\n"
+        
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+class ImpactRequest(BaseModel):
+    file_path: str
+    symbol_name: str
+    kind: str
+
+@app.post("/symbol/impact")
+async def trace_symbol_impact(payload: ImpactRequest, db: sqlite3.Connection = Depends(get_db)):
+    """
+    Calculates the blast radius of a symbol change using Graph BFS (3-hop)
+    and streams an SLM explanation of the impact.
+    """
+    # 1. Run BFS on the symbol's file to find dependents
+    from server.indexer.graph_query import graph_trace
+    trace_res = graph_trace(db, payload.file_path, depth=3)
+    dependents = trace_res.get("dependents", [])
+    
+    # 2. Extract list of dependent file paths
+    dep_list = [d["file_path"] for d in dependents]
+    
+    # 3. Format the SLM prompt
+    prompt = f"The user is modifying {payload.symbol_name} in {payload.file_path}. Here are the files that depend on it: {dep_list}. Summarize the potential blast radius and what might need testing."
+    
+    system_instruction = "You are a precise codebase search assistant. Analyze the blast radius of modifying the code symbol and explain it in clear, concise Markdown. Do NOT use JSON."
+    
+    ollama_payload = {
+        "model": OLLAMA_MODEL,
+        "messages": [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": prompt}
+        ],
+        "options": {
+            "temperature": 0.1,
+            "num_predict": 400,
+            "num_ctx": 4096
+        },
+        "stream": True
+    }
+    
+    async def event_generator():
+        url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 async with client.stream("POST", url, json=ollama_payload) as response:

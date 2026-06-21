@@ -80,7 +80,9 @@ def init_db(db_path: str) -> sqlite3.Connection:
         layer TEXT DEFAULT 'unknown',
         embedding TEXT,      -- JSON array of floats (used as fallback vector index)
         start_line INTEGER,
-        end_line INTEGER
+        end_line INTEGER,
+        signature TEXT,
+        summary TEXT
     )
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)")
@@ -139,6 +141,16 @@ def init_db(db_path: str) -> sqlite3.Connection:
 
     try:
         cursor.execute("ALTER TABLE symbols ADD COLUMN end_line INTEGER")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE symbols ADD COLUMN signature TEXT")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE symbols ADD COLUMN summary TEXT")
     except sqlite3.OperationalError:
         pass
         

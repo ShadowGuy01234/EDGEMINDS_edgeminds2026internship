@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { streamSymbolExplanation } from "../api";
+import { streamSymbolExplanation, streamSymbolImpact } from "../api";
 
 // Function to clean up SLM markdown quirks (Setext headers)
 const sanitizeMarkdown = (text) => {
@@ -12,27 +12,38 @@ const sanitizeMarkdown = (text) => {
 
 export default function TracePanel({ trace, isLoading, explanation, isStreamingExplanation }) {
   const [activeSymbol, setActiveSymbol] = useState(null);
+  const [activeTab, setActiveTab] = useState("explain");
   const [streamedText, setStreamedText] = useState("");
+  const [impactText, setImpactText] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isStreamingImpact, setIsStreamingImpact] = useState(false);
 
   useEffect(() => {
     setActiveSymbol(null);
     setStreamedText("");
+    setImpactText("");
     setIsStreaming(false);
+    setIsStreamingImpact(false);
+    setActiveTab("explain");
   }, [trace]);
 
   const handleExplainClick = async (symbol) => {
     const symbolKey = `${symbol.file_path}::${symbol.name}::${symbol.kind}`;
-    if (activeSymbol === symbolKey) {
+    if (activeSymbol === symbolKey && activeTab === "explain") {
       setActiveSymbol(null);
       setStreamedText("");
+      setImpactText("");
       setIsStreaming(false);
+      setIsStreamingImpact(false);
       return;
     }
 
     setActiveSymbol(symbolKey);
+    setActiveTab("explain");
     setStreamedText("");
+    setImpactText("");
     setIsStreaming(true);
+    setIsStreamingImpact(false);
 
     streamSymbolExplanation(
       symbol,
@@ -46,6 +57,40 @@ export default function TracePanel({ trace, isLoading, explanation, isStreamingE
         console.error("Symbol explanation stream error:", err);
         setStreamedText(`Failed to generate code explanation: ${err.message}`);
         setIsStreaming(false);
+      }
+    );
+  };
+
+  const handleTraceImpactClick = async (symbol) => {
+    const symbolKey = `${symbol.file_path}::${symbol.name}::${symbol.kind}`;
+    if (activeSymbol === symbolKey && activeTab === "impact") {
+      setActiveSymbol(null);
+      setStreamedText("");
+      setImpactText("");
+      setIsStreaming(false);
+      setIsStreamingImpact(false);
+      return;
+    }
+
+    setActiveSymbol(symbolKey);
+    setActiveTab("impact");
+    setStreamedText("");
+    setImpactText("");
+    setIsStreaming(false);
+    setIsStreamingImpact(true);
+
+    streamSymbolImpact(
+      symbol,
+      (chunk) => {
+        setImpactText((prev) => prev + chunk);
+      },
+      () => {
+        setIsStreamingImpact(false);
+      },
+      (err) => {
+        console.error("Symbol impact stream error:", err);
+        setImpactText(`Failed to generate blast radius: ${err.message}`);
+        setIsStreamingImpact(false);
       }
     );
   };
@@ -385,6 +430,15 @@ export default function TracePanel({ trace, isLoading, explanation, isStreamingE
                         </div>
 
                         <div className="flex items-center space-x-4 shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTraceImpactClick(match);
+                            }}
+                            className="px-2.5 py-1 rounded text-[10px] font-mono font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 active:scale-95 transition-all select-none"
+                          >
+                            Trace Impact
+                          </button>
                           <div className="text-right">
                             <div className="text-xs font-mono font-bold text-violet-400">
                               {(match.similarity * 100).toFixed(1)}%
@@ -404,18 +458,100 @@ export default function TracePanel({ trace, isLoading, explanation, isStreamingE
 
                       {isStreamActive && (
                         <div className="px-4 pb-4 border-t border-zinc-900/50 pt-3 animate-[fadeIn_0.2s_ease-out] text-left">
-                          <div className="bg-zinc-950/60 p-4 rounded-lg border border-zinc-800/40 shadow-inner">
-                            <span className="text-[10px] font-mono font-bold text-violet-400 uppercase tracking-widest block mb-2">Code Explanation (On-Demand RAG)</span>
-                            <pre className="text-xs text-zinc-300 font-sans leading-relaxed whitespace-pre-wrap">
-                              {sanitizeMarkdown(streamedText)}
-                              {isStreaming && (
-                                <span className="inline-block w-1.5 h-3.5 ml-1 bg-violet-400 animate-pulse align-middle" />
+                          <div className="flex border-b border-zinc-900/60 mb-3 space-x-4">
+                            <button
+                              onClick={() => {
+                                setActiveTab("explain");
+                                if (!streamedText && !isStreaming) {
+                                  setStreamedText("");
+                                  setIsStreaming(true);
+                                  streamSymbolExplanation(
+                                    match,
+                                    (chunk) => {
+                                      setStreamedText((prev) => prev + chunk);
+                                    },
+                                    () => {
+                                      setIsStreaming(false);
+                                    },
+                                    (err) => {
+                                      console.error("Symbol explanation stream error:", err);
+                                      setStreamedText(`Failed to generate code explanation: ${err.message}`);
+                                      setIsStreaming(false);
+                                    }
+                                  );
+                                }
+                              }}
+                              className={`pb-2 text-[10px] font-mono uppercase tracking-wider transition-all relative ${
+                                activeTab === "explain" ? "text-violet-400 font-bold" : "text-zinc-500 hover:text-zinc-300"
+                              }`}
+                            >
+                              Explanation
+                              {activeTab === "explain" && (
+                                <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-violet-500" />
                               )}
-                            </pre>
-                            {isStreaming && !streamedText && (
-                              <p className="text-[10px] text-zinc-500 font-mono mt-1 animate-pulse">Generating explanation...</p>
-                            )}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setActiveTab("impact");
+                                if (!impactText && !isStreamingImpact) {
+                                  setImpactText("");
+                                  setIsStreamingImpact(true);
+                                  streamSymbolImpact(
+                                    match,
+                                    (chunk) => {
+                                      setImpactText((prev) => prev + chunk);
+                                    },
+                                    () => {
+                                      setIsStreamingImpact(false);
+                                    },
+                                    (err) => {
+                                      console.error("Symbol impact stream error:", err);
+                                      setImpactText(`Failed to generate blast radius: ${err.message}`);
+                                      setIsStreamingImpact(false);
+                                    }
+                                  );
+                                }
+                              }}
+                              className={`pb-2 text-[10px] font-mono uppercase tracking-wider transition-all relative ${
+                                activeTab === "impact" ? "text-red-400 font-bold" : "text-zinc-500 hover:text-zinc-300"
+                              }`}
+                            >
+                              Blast Radius
+                              {activeTab === "impact" && (
+                                <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-red-500" />
+                              )}
+                            </button>
                           </div>
+
+                          {activeTab === "explain" && (
+                            <div className="bg-zinc-950/60 p-4 rounded-lg border border-zinc-800/40 shadow-inner">
+                              <span className="text-[10px] font-mono font-bold text-violet-400 uppercase tracking-widest block mb-2">Code Explanation (On-Demand RAG)</span>
+                              <pre className="text-xs text-zinc-300 font-sans leading-relaxed whitespace-pre-wrap">
+                                {sanitizeMarkdown(streamedText)}
+                                {isStreaming && (
+                                  <span className="inline-block w-1.5 h-3.5 ml-1 bg-violet-400 animate-pulse align-middle" />
+                                )}
+                              </pre>
+                              {isStreaming && !streamedText && (
+                                <p className="text-[10px] text-zinc-500 font-mono mt-1 animate-pulse">Generating explanation...</p>
+                              )}
+                            </div>
+                          )}
+
+                          {activeTab === "impact" && (
+                            <div className="bg-zinc-950/60 p-4 rounded-lg border border-zinc-800/40 shadow-inner">
+                              <span className="text-[10px] font-mono font-bold text-red-400 uppercase tracking-widest block mb-2">Blast Radius Analysis</span>
+                              <pre className="text-xs text-zinc-300 font-sans leading-relaxed whitespace-pre-wrap">
+                                {sanitizeMarkdown(impactText)}
+                                {isStreamingImpact && (
+                                  <span className="inline-block w-1.5 h-3.5 ml-1 bg-red-400 animate-pulse align-middle" />
+                                )}
+                              </pre>
+                              {isStreamingImpact && !impactText && (
+                                <p className="text-[10px] text-zinc-500 font-mono mt-1 animate-pulse">Running BFS and tracing impact...</p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

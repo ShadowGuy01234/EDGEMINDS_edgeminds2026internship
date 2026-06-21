@@ -2,14 +2,14 @@ import os
 import argparse
 import json
 import time
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from server.indexer.db import init_db
 from server.indexer.graph_builder import insert_nodes, insert_edges
 from server.indexer.vector_builder import insert_symbols
 from server.indexer import embedder
 
-def build_index(manifest_path: str, db_path: str) -> Dict[str, Any]:
+def build_index(manifest_path: str, db_path: str, repo_path: Optional[str] = None) -> Dict[str, Any]:
     """
     Main orchestration function to build the SQLite index from the parsed manifest.
     """
@@ -44,7 +44,19 @@ def build_index(manifest_path: str, db_path: str) -> Dict[str, Any]:
     
     # 3. Insert Symbols (embeddings for vector search)
     print("Generating symbol embeddings and indexing...")
-    insert_symbols(conn, blueprints, embedder, has_vss)
+    
+    # Extract repo_path from DB if not provided
+    if not repo_path:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM settings WHERE key = 'repo_path'")
+            row = cursor.fetchone()
+            if row:
+                repo_path = row[0]
+        except Exception:
+            pass
+            
+    insert_symbols(conn, blueprints, embedder, has_vss, repo_path=repo_path)
     
     # Count results
     cursor = conn.cursor()
