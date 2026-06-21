@@ -219,3 +219,78 @@ export async function streamSymbolImpact(symbol, onChunk, onComplete, onError) {
     onError(err);
   }
 }
+
+export async function getSymbolCode(symbol) {
+  return fetchJson("/symbol/code", {
+    method: "POST",
+    body: JSON.stringify({
+      file_path: symbol.file_path,
+      symbol_name: symbol.name,
+      kind: symbol.kind
+    })
+  });
+}
+
+export async function streamSymbolChat(symbolName, symbolCode, history, userMessage, onChunk, onComplete, onError) {
+  try {
+    const base = API_BASE.replace(/\/$/, "");
+    const url = `${base}/chat/stream`;
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        symbol_name: symbolName,
+        symbol_code: symbolCode,
+        history: history,
+        user_message: userMessage
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP Error ${response.status}`);
+    }
+    
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+      
+      for (const line of lines) {
+        const cleanedLine = line.trim();
+        if (!cleanedLine) continue;
+        
+        if (cleanedLine.startsWith("data: [DONE]")) {
+          onComplete();
+          return;
+        }
+        
+        if (cleanedLine.startsWith("data: ")) {
+          try {
+            const parsed = JSON.parse(cleanedLine.substring(6));
+            if (parsed.chunk) {
+              onChunk(parsed.chunk);
+            } else if (parsed.error) {
+              onError(new Error(parsed.error));
+            }
+          } catch (e) {
+            console.error("SSE parse error", e);
+          }
+        }
+      }
+    }
+    onComplete();
+  } catch (err) {
+    onError(err);
+  }
+}

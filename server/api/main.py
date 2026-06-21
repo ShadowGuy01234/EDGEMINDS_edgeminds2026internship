@@ -3,7 +3,7 @@ import sqlite3
 import json
 import httpx
 import time
-from typing import Dict, Any
+from typing import Dict, Any, List
 from fastapi import FastAPI, Depends, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -61,6 +61,21 @@ class IngestRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     query: str
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    symbol_name: str
+    symbol_code: str
+    history: List[ChatMessage]
+    user_message: str
+
+class SymbolCodeRequest(BaseModel):
+    file_path: str
+    symbol_name: str
+    kind: str
 
 # Database Connection Dependency
 def get_db():
@@ -625,6 +640,103 @@ async def trace_symbol_impact(payload: ImpactRequest, db: sqlite3.Connection = D
         "options": {
             "temperature": 0.1,
             "num_predict": 400,
+            "num_ctx": 4096
+        },
+        "stream": True
+    }
+    
+    async def event_generator():
+        url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                async with client.stream("POST", url, json=ollama_payload) as response:
+                    if response.status_code != 200:
+                        err_text = f"Ollama HTTP error {response.status_code}"
+                        yield f"data: {json.dumps({'error': err_text})}\n\n"
+                        yield "data: [DONE]\n\n"
+                        return
+                        
+                    async for chunk in response.aiter_text():
+                        for line in chunk.split("\n"):
+                            if line.strip():
+                                try:
+                                    data = json.loads(line)
+                                    content = data.get("message", {}).get("content", "")
+                                    if content:
+                                        yield f"data: {json.dumps({'chunk': content})}\n\n"
+                                except Exception:
+                                    pass
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            
+        yield "data: [DONE]\n\n"
+        
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/symbol/code")
+def get_symbol_code(payload: SymbolCodeRequest, db: sqlite3.Connection = Depends(get_db)):
+    """
+    Returns the raw source code of a specified symbol in a file.
+    """
+    cursor = db.cursor()
+    cursor.execute(
+        "SELECT start_line, end_line FROM symbols WHERE file_path = ? AND name = ? AND kind = ?",
+        (payload.file_path, payload.symbol_name, payload.kind)
+    )
+    row = cursor.fetchone()
+    if not row:
+        cursor.execute(
+            "SELECT start_line, end_line FROM symbols WHERE file_path = ? AND name = ?",
+            (payload.file_path, payload.symbol_name)
+        )
+        row = cursor.fetchone()
+        
+    start_line, end_line = row if row else (None, None)
+    
+    cursor.execute("SELECT value FROM settings WHERE key = 'repo_path'")
+    repo_row = cursor.fetchone()
+    repo_path = repo_row[0] if repo_row else ""
+    full_path = os.path.join(repo_path, payload.file_path) if repo_path else payload.file_path
+    
+    code = get_raw_source_slice(full_path, start_line, end_line)
+    return {"code": code}
+
+
+@app.post("/chat/stream")
+async def chat_with_symbol(payload: ChatRequest):
+    """
+    Streams a conversational chat session about a specific symbol using SSE.
+    System prompt locks context to the symbol's raw code.
+    Slices history to the last 4 messages to preserve memory/context window.
+    """
+    system_prompt = (
+        f"You are an expert code analyst assistant. The user is asking questions about "
+        f"the symbol `{payload.symbol_name}`. Below is the complete raw source code of `{payload.symbol_name}`. "
+        f"Always base your responses on this source code, keeping answers precise and focused on this code.\n\n"
+        f"Source Code of `{payload.symbol_name}`:\n"
+        f"```\n"
+        f"{payload.symbol_code}\n"
+        f"```"
+    )
+    
+    # Initialize messages list with system prompt
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Slice the last 4 messages of history to protect memory limits
+    sliced_history = payload.history[-4:] if payload.history else []
+    for msg in sliced_history:
+        messages.append({"role": msg.role, "content": msg.content})
+        
+    # Append the new user message
+    messages.append({"role": "user", "content": payload.user_message})
+    
+    ollama_payload = {
+        "model": OLLAMA_MODEL,
+        "messages": messages,
+        "options": {
+            "temperature": 0.2,
+            "num_predict": 300,
             "num_ctx": 4096
         },
         "stream": True

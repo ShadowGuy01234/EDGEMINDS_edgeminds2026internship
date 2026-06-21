@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { streamSymbolExplanation, streamSymbolImpact } from "../api";
+import { streamSymbolExplanation, streamSymbolImpact, getSymbolCode, streamSymbolChat } from "../api";
 
 // Function to clean up SLM markdown quirks (Setext headers)
 const sanitizeMarkdown = (text) => {
@@ -18,6 +18,12 @@ export default function TracePanel({ trace, isLoading, explanation, isStreamingE
   const [isStreaming, setIsStreaming] = useState(false);
   const [isStreamingImpact, setIsStreamingImpact] = useState(false);
 
+  // Chat states
+  const [chatHistory, setChatHistory] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isChatStreaming, setIsChatStreaming] = useState(false);
+  const [symbolCode, setSymbolCode] = useState("");
+
   useEffect(() => {
     setActiveSymbol(null);
     setStreamedText("");
@@ -25,6 +31,11 @@ export default function TracePanel({ trace, isLoading, explanation, isStreamingE
     setIsStreaming(false);
     setIsStreamingImpact(false);
     setActiveTab("explain");
+
+    setChatHistory([]);
+    setChatInput("");
+    setIsChatStreaming(false);
+    setSymbolCode("");
   }, [trace]);
 
   const handleExplainClick = async (symbol) => {
@@ -44,6 +55,16 @@ export default function TracePanel({ trace, isLoading, explanation, isStreamingE
     setImpactText("");
     setIsStreaming(true);
     setIsStreamingImpact(false);
+
+    setChatHistory([]);
+    setChatInput("");
+    setIsChatStreaming(false);
+    setSymbolCode("");
+
+    // Fetch raw symbol code
+    getSymbolCode(symbol)
+      .then((data) => setSymbolCode(data.code || ""))
+      .catch((err) => console.error("Error fetching symbol code:", err));
 
     streamSymbolExplanation(
       symbol,
@@ -79,6 +100,16 @@ export default function TracePanel({ trace, isLoading, explanation, isStreamingE
     setIsStreaming(false);
     setIsStreamingImpact(true);
 
+    setChatHistory([]);
+    setChatInput("");
+    setIsChatStreaming(false);
+    setSymbolCode("");
+
+    // Fetch raw symbol code
+    getSymbolCode(symbol)
+      .then((data) => setSymbolCode(data.code || ""))
+      .catch((err) => console.error("Error fetching symbol code:", err));
+
     streamSymbolImpact(
       symbol,
       (chunk) => {
@@ -91,6 +122,51 @@ export default function TracePanel({ trace, isLoading, explanation, isStreamingE
         console.error("Symbol impact stream error:", err);
         setImpactText(`Failed to generate blast radius: ${err.message}`);
         setIsStreamingImpact(false);
+      }
+    );
+  };
+
+  const handleSendMessage = async (symbol, code) => {
+    if (!chatInput.trim()) return;
+
+    const userMessage = chatInput.trim();
+    setChatInput("");
+    setIsChatStreaming(true);
+
+    const userMsg = { role: "user", content: userMessage };
+    const assistantMsg = { role: "assistant", content: "" };
+
+    setChatHistory((prev) => [...prev, userMsg, assistantMsg]);
+
+    streamSymbolChat(
+      symbol.name,
+      code,
+      chatHistory,
+      userMessage,
+      (chunk) => {
+        setChatHistory((prev) => {
+          const next = [...prev];
+          if (next.length > 0) {
+            const last = next[next.length - 1];
+            next[next.length - 1] = { ...last, content: last.content + chunk };
+          }
+          return next;
+        });
+      },
+      () => {
+        setIsChatStreaming(false);
+      },
+      (err) => {
+        console.error("Chat streaming error:", err);
+        setChatHistory((prev) => {
+          const next = [...prev];
+          if (next.length > 0) {
+            const last = next[next.length - 1];
+            next[next.length - 1] = { ...last, content: `Error: ${err.message}` };
+          }
+          return next;
+        });
+        setIsChatStreaming(false);
       }
     );
   };
@@ -524,17 +600,77 @@ export default function TracePanel({ trace, isLoading, explanation, isStreamingE
                           </div>
 
                           {activeTab === "explain" && (
-                            <div className="bg-zinc-950/60 p-4 rounded-lg border border-zinc-800/40 shadow-inner">
-                              <span className="text-[10px] font-mono font-bold text-violet-400 uppercase tracking-widest block mb-2">Code Explanation (On-Demand RAG)</span>
-                              <pre className="text-xs text-zinc-300 font-sans leading-relaxed whitespace-pre-wrap">
-                                {sanitizeMarkdown(streamedText)}
-                                {isStreaming && (
-                                  <span className="inline-block w-1.5 h-3.5 ml-1 bg-violet-400 animate-pulse align-middle" />
+                            <div className="space-y-4">
+                              <div className="bg-zinc-950/60 p-4 rounded-lg border border-zinc-800/40 shadow-inner">
+                                <span className="text-[10px] font-mono font-bold text-violet-400 uppercase tracking-widest block mb-2">Code Explanation (On-Demand RAG)</span>
+                                <pre className="text-xs text-zinc-300 font-sans leading-relaxed whitespace-pre-wrap">
+                                  {sanitizeMarkdown(streamedText)}
+                                  {isStreaming && (
+                                    <span className="inline-block w-1.5 h-3.5 ml-1 bg-violet-400 animate-pulse align-middle" />
+                                  )}
+                                </pre>
+                                {isStreaming && !streamedText && (
+                                  <p className="text-[10px] text-zinc-500 font-mono mt-1 animate-pulse">Generating explanation...</p>
                                 )}
-                              </pre>
-                              {isStreaming && !streamedText && (
-                                <p className="text-[10px] text-zinc-500 font-mono mt-1 animate-pulse">Generating explanation...</p>
-                              )}
+                              </div>
+
+                              {/* Chat Section */}
+                              <div className="bg-zinc-950/40 p-4 rounded-lg border border-zinc-900/60 space-y-3">
+                                <span className="text-[10px] font-mono font-bold text-violet-400 uppercase tracking-widest block">Chat with Symbol</span>
+                                <div className="max-h-[250px] overflow-y-auto space-y-3 p-3 bg-zinc-950/60 rounded-lg border border-zinc-800/40 shadow-inner flex flex-col scrollbar-thin scrollbar-thumb-zinc-800">
+                                  {chatHistory.length === 0 ? (
+                                    <p className="text-xs text-zinc-500 font-mono italic text-center py-4">Ask a question about this symbol...</p>
+                                  ) : (
+                                    chatHistory.map((msg, idx) => (
+                                      <div
+                                        key={idx}
+                                        className={`flex flex-col max-w-[85%] ${
+                                          msg.role === "user" ? "self-end items-end" : "self-start items-start"
+                                        }`}
+                                      >
+                                        <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider mb-1 font-bold">
+                                          {msg.role === "user" ? "You" : "Assistant"}
+                                        </span>
+                                        <div
+                                          className={`text-xs p-3 rounded-lg border leading-relaxed whitespace-pre-wrap font-sans ${
+                                            msg.role === "user"
+                                              ? "bg-blue-600/20 text-blue-100 border-blue-500/30"
+                                              : "bg-zinc-900/60 text-zinc-300 border-zinc-800/80"
+                                          }`}
+                                        >
+                                          {sanitizeMarkdown(msg.content)}
+                                          {isChatStreaming && idx === chatHistory.length - 1 && !msg.content && (
+                                            <span className="inline-block w-1.5 h-3.5 ml-1 bg-violet-400 animate-pulse align-middle" />
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                                <form
+                                  onSubmit={(e) => {
+                                    e.preventDefault();
+                                    handleSendMessage(match, symbolCode);
+                                  }}
+                                  className="flex space-x-2"
+                                >
+                                  <input
+                                    type="text"
+                                    value={chatInput}
+                                    onChange={(e) => setChatInput(e.target.value)}
+                                    disabled={isChatStreaming || !symbolCode}
+                                    placeholder={symbolCode ? "Ask a follow-up question..." : "Loading symbol code..."}
+                                    className="flex-1 bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-violet-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-sans"
+                                  />
+                                  <button
+                                    type="submit"
+                                    disabled={isChatStreaming || !chatInput.trim() || !symbolCode}
+                                    className="bg-violet-600 hover:bg-violet-500 active:scale-95 text-white font-mono text-xs font-semibold px-4 py-2 rounded-lg transition-all disabled:opacity-50 disabled:pointer-events-none select-none"
+                                  >
+                                    {isChatStreaming ? "Streaming..." : "Send"}
+                                  </button>
+                                </form>
+                              </div>
                             </div>
                           )}
 
