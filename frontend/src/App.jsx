@@ -36,7 +36,7 @@ export default function App() {
     // Initial fetch
     refreshData();
 
-    // Poll status every 5 seconds (as per specification)
+    // Poll status every 30 seconds
     const interval = setInterval(async () => {
       try {
         const s = await getStatus();
@@ -44,7 +44,7 @@ export default function App() {
       } catch (e) {
         console.error("Failed polling status:", e);
       }
-    }, 5000);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, []);
