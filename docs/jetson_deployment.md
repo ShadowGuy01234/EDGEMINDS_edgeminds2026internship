@@ -180,10 +180,44 @@ npm run build
 ### 1. Transfer Backend Files
 Copy the `server/`, `scripts/`, `requirements.txt`, and `.env.prod` files from your local machine to the `/home/username/Edge_minds/` folder on your Jetson board.
 
+Depending on your access method, choose one of the following options:
+
+#### Option A: Direct Local Shell (If your local terminal has network access to the Jetson)
+Run `rsync` or `scp` directly from your developer machine's terminal:
 ```bash
 # From your local machine, sync backend folders
 rsync -avz --exclude 'node_modules' --exclude '.git' --exclude '__pycache__' --exclude 'venv' --exclude 'index' \
   Edge_minds/ username@<jetson_ip_address>:/home/username/Edge_minds/
+```
+
+#### Option B: Using Git Clone (Recommended for Browser-based SSH)
+If you are connected via a browser-based SSH window and cannot push files from your laptop, push your code to a Git repository (like a private GitHub repository) and clone it on the Jetson:
+```bash
+# On the Jetson SSH terminal
+git clone https://github.com/your-username/your-repo.git /home/username/Edge_minds
+```
+*(If it is a private repository, you can configure a Personal Access Token or upload a deploy key to GitHub).*
+
+#### Option C: Packaging and downloading via URL (For Browser-based SSH)
+If you do not want to use Git, create a tarball/zip archive of the code on your developer machine, upload it to a temporary file host (e.g. `file.io`, a private server, or secure cloud storage), and download/extract it on the Jetson:
+```bash
+# 1. On your developer laptop, package the app:
+tar -czf app.tar.gz --exclude="node_modules" --exclude=".git" --exclude="venv" --exclude="index" server/ scripts/ frontend/dist/ requirements.txt .env.prod
+
+# 2. Upload app.tar.gz to your file host to get a download link.
+
+# 3. On the Jetson SSH terminal, download and extract:
+wget -O app.tar.gz "<your_download_link>"
+mkdir -p /home/username/Edge_minds
+tar -xzf app.tar.gz -C /home/username/Edge_minds/
+```
+
+#### Option D: Outbound SCP (Pulling files from your laptop)
+If your developer laptop is running an SSH server (like OpenSSH) and is reachable from the Jetson board over the local network:
+```bash
+# On the Jetson SSH terminal (pull files from your laptop)
+mkdir -p /home/username/Edge_minds
+scp -r laptop_user@<laptop_ip_address>:/path/to/Edge_minds/* /home/username/Edge_minds/
 ```
 
 ### 2. Install Backend Dependencies
