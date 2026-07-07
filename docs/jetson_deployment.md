@@ -120,9 +120,13 @@ source venv/bin/activate
 pip install --upgrade pip
 pip install setuptools testresources
 
-# Download and install NVIDIA PyTorch wheel (example URL)
-wget https://developer.download.nvidia.com/compute/redist/jp/v60/pytorch/torch-2.3.0a0+40ec155e.nv24.05-cp310-cp310-linux_aarch64.whl
-pip install torch-2.3.0a0+40ec155e.nv24.05-cp310-cp310-linux_aarch64.whl
+# Download and install NVIDIA PyTorch wheel (example URL for JetPack 6.0 / Python 3.10)
+wget https://developer.download.nvidia.com/compute/redist/jp/v60/pytorch/torch-2.4.0a0+07cecf4168.nv24.05.14710581-cp310-cp310-linux_aarch64.whl
+pip install torch-2.4.0a0+07cecf4168.nv24.05.14710581-cp310-cp310-linux_aarch64.whl
+
+# OR for JetPack 6.1 (L4T R36.4.x / Python 3.10):
+# wget https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
+# pip install torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
 ```
 
 Example download and installation for **JetPack 5.1.2 (Python 3.8)**:
@@ -354,3 +358,73 @@ If repository scanning is too slow:
   OMP_NUM_THREADS=4
   MKL_NUM_THREADS=4
   ```
+
+### APT/dpkg "Read-only file system" Error
+If your installation fails with `dpkg: error ... Read-only file system`, it means the OS has mounted the root filesystem as read-only. This happens when the kernel detects hardware I/O faults (common on SD cards/USB drives) or filesystem corruption.
+
+#### 1. Remount as Read-Write (Temporary Fix)
+Try to force-remount the root filesystem as read-write:
+```bash
+sudo mount -o remount,rw /
+```
+If this succeeds, try running your `apt-get install` command again.
+
+#### 2. Check for File System Errors (`dmesg`)
+If the system immediately falls back to read-only or throws errors, inspect the kernel logs:
+```bash
+dmesg | grep -i -E "ext4|read-only|i/o error|error"
+```
+If you see block errors (`mmcblk0` or `sda` read errors), your SD card or drive may be physically failing.
+
+#### 3. Run Filesystem Repair (`fsck`)
+To repair soft corruption, force a filesystem check on the next boot:
+```bash
+sudo touch /forcefsck
+sudo reboot
+```
+*Note: If the OS is on an SD card, you may need to insert the card into another computer and run `sudo fsck -f -y /dev/sdX` (where sdX is the SD card partition).*
+
+#### 4. No-sudo / User-space Fallback (If `/usr` remains read-only)
+If you cannot install packages at the system level:
+- Download and install **Miniconda** (ARM64 version) directly into a writeable directory (like `/home/username/miniconda3/` or a mounted external drive). Miniconda allows you to install Python, compilers, git, and libraries entirely in user-space without `sudo`.
+  ```bash
+  wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-aarch64.sh
+  bash Mambaforge-Linux-aarch64.sh -b -p /home/username/miniconda3
+  source /home/username/miniconda3/bin/activate
+  ```
+
+---
+
+## 11. Optional: Accessing the Dashboard via ngrok
+
+To expose your backend API and frontend dashboard securely to the internet without setting up port forwarding on your router:
+
+### 1. Download and Install ngrok in User Space
+Since the system root may be read-only, download the ngrok Linux ARM64 binary directly to your home directory:
+
+```bash
+# Navigate to home directory
+cd ~
+
+# Download the ngrok Linux ARM64 tarball
+wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-arm64.tgz
+
+# Extract it
+tar -xvzf ngrok-v3-stable-linux-arm64.tgz
+```
+
+### 2. Configure Authenticator Token
+Retrieve your Authtoken from your [ngrok dashboard](https://dashboard.ngrok.com/) and register it:
+
+```bash
+./ngrok config add-authtoken <your_ngrok_auth_token>
+```
+
+### 3. Start Tunnel
+Start a tunnel pointing to the CodeGenome-Edge API port (`8000`):
+
+```bash
+./ngrok http 8000
+```
+
+ngrok will output a public forwarding URL (e.g., `https://xxxx-xx-xx.ngrok-free.app`). You can open this URL in any browser to access the CodeGenome-Edge dashboard.

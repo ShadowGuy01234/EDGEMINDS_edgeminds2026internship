@@ -440,8 +440,8 @@ async def explain_query(payload: ExplainRequest):
     
     async def stream_generator():
         url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
-        # Use 15 second timeout to allow Ollama to start generating
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        # Use 180 second timeout to allow Ollama to start generating
+        async with httpx.AsyncClient(timeout=180.0) as client:
             try:
                 async with client.stream("POST", url, json=ollama_payload) as response:
                     if response.status_code != 200:
@@ -583,7 +583,7 @@ DO NOT wrap headers in bold asterisks.
         }
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=180.0) as client:
                 async with client.stream("POST", url, json=ollama_payload) as response:
                     if response.status_code != 200:
                         err_text = f"Ollama HTTP error {response.status_code}"
@@ -650,7 +650,7 @@ async def trace_symbol_impact(payload: ImpactRequest, db: sqlite3.Connection = D
     async def event_generator():
         url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=180.0) as client:
                 async with client.stream("POST", url, json=ollama_payload) as response:
                     if response.status_code != 200:
                         err_text = f"Ollama HTTP error {response.status_code}"
@@ -747,7 +747,7 @@ async def chat_with_symbol(payload: ChatRequest):
     async def event_generator():
         url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=180.0) as client:
                 async with client.stream("POST", url, json=ollama_payload) as response:
                     if response.status_code != 200:
                         err_text = f"Ollama HTTP error {response.status_code}"
