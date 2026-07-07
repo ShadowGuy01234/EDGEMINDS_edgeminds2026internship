@@ -10,7 +10,7 @@ def get_model() -> SentenceTransformer:
     if _model is None:
         print("Loading SentenceTransformer model 'all-MiniLM-L6-v2'...")
         start_time = time.time()
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
+        _model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
         print(f"Model loaded in {time.time() - start_time:.2f} seconds.")
     return _model
 
