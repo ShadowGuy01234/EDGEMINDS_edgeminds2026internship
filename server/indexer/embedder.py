@@ -8,9 +8,11 @@ _model = None
 def get_model() -> SentenceTransformer:
     global _model
     if _model is None:
-        print("Loading SentenceTransformer model 'all-MiniLM-L6-v2'...")
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Loading SentenceTransformer model 'all-MiniLM-L6-v2' on device '{device}'...")
         start_time = time.time()
-        _model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+        _model = SentenceTransformer("all-MiniLM-L6-v2", device=device)
         print(f"Model loaded in {time.time() - start_time:.2f} seconds.")
     return _model
 
