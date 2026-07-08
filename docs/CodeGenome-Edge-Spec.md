@@ -83,7 +83,7 @@ code changes.
 | **Ollama** | ARM64 binary, model pre-pulled before air-gap |
 | **Purpose** | Demo-day deployment, local network serving |
 | **Constraint** | 4GB unified memory, ARM64 arch, no internet |
-| **Ollama URL** | `http://localhost:11434` (same, local) |
+| **Ollama URL** | `http://172.17.0.1:11434` |
 | **API port** | `http://0.0.0.0:8000` (exposed on LAN) |
 | **Frontend** | Static build served by FastAPI (no Vite) |
 
@@ -103,7 +103,7 @@ FRONTEND_STATIC_DIR=          # empty = use Vite dev server separately
 ENV=dev
 
 # .env.prod (Jetson)
-OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_BASE_URL=http://172.17.0.1:11434
 OLLAMA_MODEL=llama3.2:1b
 DB_PATH=/opt/codegenome/index/codegenome.db
 MANIFEST_PATH=/opt/codegenome/index/manifest.json

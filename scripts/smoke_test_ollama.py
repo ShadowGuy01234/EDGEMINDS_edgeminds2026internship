@@ -2,12 +2,29 @@ import httpx
 import json
 import sys
 
+import os
+
+# Try to load .env if available
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 def main():
-    url = "http://localhost:11434/api/generate"
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    model = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
+    url = f"{base_url.rstrip('/')}/api/generate"
+    
     payload = {
-        "model": "llama3.2:1b",
+        "model": model,
         "prompt": "Respond with the word test.",
-        "stream": False
+        "stream": False,
+        "options": {
+            "num_ctx": 1024,
+            "num_gpu": 1,
+            "use_mmap": True
+        }
     }
     
     print(f"Connecting to Ollama at {url}...")

@@ -245,7 +245,7 @@ cp .env.prod .env
 
 Open `.env` using `nano` and configure the variables:
 ```env
-OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_BASE_URL=http://172.17.0.1:11434
 OLLAMA_MODEL=llama3.2:1b
 DB_PATH=./index/codegenome.db
 MANIFEST_PATH=./index/manifest.json

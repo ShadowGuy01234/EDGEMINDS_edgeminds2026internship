@@ -31,11 +31,11 @@ Run Ollama in CPU mode to prevent Out-of-Memory (OOM) conflicts with the PyTorch
 kill -9 $(pgrep ollama)
 kill -9 $(pgrep llama)
 
-# 2. Start Ollama in the background ignoring CUDA devices
-CUDA_VISIBLE_DEVICES="" ollama serve > ~/ollama.log 2>&1 &
+# 2. Start Ollama in the background bound to all network interfaces
+CUDA_VISIBLE_DEVICES="" OLLAMA_HOST="0.0.0.0" ollama serve > ~/ollama.log 2>&1 &
 
-# 3. Wait 5 seconds and verify Ollama is responding
-curl http://localhost:11434/
+# 3. Wait 5 seconds and verify Ollama is responding on the Jetson bridge IP
+curl http://172.17.0.1:11434/
 
 # 4. Pull the Llama 3.2 1B model
 ollama pull llama3.2:1b

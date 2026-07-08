@@ -433,7 +433,9 @@ async def explain_query(payload: ExplainRequest):
         "options": {
             "temperature": 0.1,
             "num_predict": 120,
-            "num_ctx": 2048
+            "num_ctx": 1024,
+            "num_gpu": 1,
+            "use_mmap": True
         },
         "stream": True
     }
@@ -577,7 +579,9 @@ DO NOT wrap headers in bold asterisks.
             "options": {
                 "temperature": 0.1,
                 "num_predict": 400,
-                "num_ctx": 4096
+                "num_ctx": 1024,
+                "num_gpu": 1,
+                "use_mmap": True
             },
             "stream": True
         }
@@ -642,7 +646,9 @@ async def trace_symbol_impact(payload: ImpactRequest, db: sqlite3.Connection = D
         "options": {
             "temperature": 0.1,
             "num_predict": 400,
-            "num_ctx": 4096
+            "num_ctx": 1024,
+            "num_gpu": 1,
+            "use_mmap": True
         },
         "stream": True
     }
@@ -739,7 +745,9 @@ async def chat_with_symbol(payload: ChatRequest):
         "options": {
             "temperature": 0.2,
             "num_predict": 300,
-            "num_ctx": 4096
+            "num_ctx": 1024,
+            "num_gpu": 1,
+            "use_mmap": True
         },
         "stream": True
     }
