@@ -458,19 +458,22 @@ async def explain_query(payload: ExplainRequest):
         "Direct Answer:"
     )
     
+    options = {
+        "temperature": 0.1,
+        "num_predict": 120,
+        "num_ctx": 512,
+        "use_mmap": True
+    }
+    if OLLAMA_NUM_GPU >= 0:
+        options["num_gpu"] = OLLAMA_NUM_GPU
+
     ollama_payload = {
         "model": OLLAMA_MODEL,
         "messages": [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": prompt}
         ],
-        "options": {
-            "temperature": 0.1,
-            "num_predict": 120,
-            "num_ctx": 512,
-            "num_gpu": OLLAMA_NUM_GPU,
-            "use_mmap": True
-        },
+        "options": options,
         "stream": True
     }
     
@@ -604,19 +607,22 @@ DO NOT wrap headers in bold asterisks.
     
     async def event_generator():
         url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
+        options = {
+            "temperature": 0.1,
+            "num_predict": 400,
+            "num_ctx": 512,
+            "use_mmap": True
+        }
+        if OLLAMA_NUM_GPU >= 0:
+            options["num_gpu"] = OLLAMA_NUM_GPU
+
         ollama_payload = {
             "model": OLLAMA_MODEL,
             "messages": [
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": prompt}
             ],
-            "options": {
-                "temperature": 0.1,
-                "num_predict": 400,
-                "num_ctx": 512,
-                "num_gpu": OLLAMA_NUM_GPU,
-                "use_mmap": True
-            },
+            "options": options,
             "stream": True
         }
         
@@ -671,19 +677,22 @@ async def trace_symbol_impact(payload: ImpactRequest, db: sqlite3.Connection = D
     
     system_instruction = "You are a precise codebase search assistant. Analyze the blast radius of modifying the code symbol and explain it in clear, concise Markdown. Do NOT use JSON."
     
+    options = {
+        "temperature": 0.1,
+        "num_predict": 400,
+        "num_ctx": 512,
+        "use_mmap": True
+    }
+    if OLLAMA_NUM_GPU >= 0:
+        options["num_gpu"] = OLLAMA_NUM_GPU
+
     ollama_payload = {
         "model": OLLAMA_MODEL,
         "messages": [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": prompt}
         ],
-        "options": {
-            "temperature": 0.1,
-            "num_predict": 400,
-            "num_ctx": 512,
-            "num_gpu": OLLAMA_NUM_GPU,
-            "use_mmap": True
-        },
+        "options": options,
         "stream": True
     }
     
@@ -773,16 +782,19 @@ async def chat_with_symbol(payload: ChatRequest):
     # Append the new user message
     messages.append({"role": "user", "content": payload.user_message})
     
+    options = {
+        "temperature": 0.2,
+        "num_predict": 300,
+        "num_ctx": 512,
+        "use_mmap": True
+    }
+    if OLLAMA_NUM_GPU >= 0:
+        options["num_gpu"] = OLLAMA_NUM_GPU
+
     ollama_payload = {
         "model": OLLAMA_MODEL,
         "messages": messages,
-        "options": {
-            "temperature": 0.2,
-            "num_predict": 300,
-            "num_ctx": 512,
-            "num_gpu": OLLAMA_NUM_GPU,
-            "use_mmap": True
-        },
+        "options": options,
         "stream": True
     }
     
