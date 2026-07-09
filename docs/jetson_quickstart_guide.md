@@ -17,8 +17,8 @@ Since we are using a remote Ollama server, you do not need to install or run Oll
    cat << 'EOF' > .env
    OLLAMA_BASE_URL=http://172.17.0.1:11434
    OLLAMA_MODEL=llama3.2:1b
-   # GPU layer offload: -1 = auto (all layers to GPU), 0 = CPU-only, >0 = explicit layer count
-   OLLAMA_NUM_GPU=-1
+   # GPU configuration: set to 1 as specified for Jetson Orin board
+   OLLAMA_NUM_GPU=1
    DB_PATH=./index/codegenome.db
    MANIFEST_PATH=./index/manifest.json
    API_HOST=0.0.0.0
@@ -29,9 +29,9 @@ Since we are using a remote Ollama server, you do not need to install or run Oll
    ```
 
    > **`OLLAMA_NUM_GPU` explained:**
-   > - `-1` (default) — Ollama auto-detects and offloads all model layers to the Jetson GPU. **Use this.**
-   > - `0` — CPU-only mode. Do not use on Jetson (was the previous default, caused slow responses).
-   > - Any positive integer — sets an explicit GPU layer count if you need to cap VRAM usage.
+   > - `1` (default) — Configures Ollama to use the Jetson Orin GPU accelerator for inference. **Use this.**
+   > - `0` — CPU-only mode. Do not use on Jetson (causes slow responses).
+
 
 ---
 
