@@ -4,46 +4,31 @@ This guide contains the exact steps and commands to deploy and run **CodeGenome-
 
 ---
 
-## Step 1: Install Ollama (User-space)
-Since the root directory is read-only, download and extract Ollama directly into your home directory:
+## Step 1: Configure Environment Variables
+Since we are using a remote Ollama server, you do not need to install or run Ollama locally on the Jetson board. Instead, configure the application to connect to the remote Ollama service URL:
 
-```bash
-# 1. Install zstd (required to extract the .tar.zst archive)
-sudo apt-get update && sudo apt-get install -y zstd
+1. Navigate to the repository:
+   ```bash
+   cd ~/EDGEMINDS_edgeminds2026internship
+   ```
 
-# 2. Download the Ollama Linux ARM64 package
-wget https://ollama.com/download/ollama-linux-arm64.tar.zst
-
-# 3. Extract the binary to your home directory (~/bin/ollama)
-tar --zstd -xvf ollama-linux-arm64.tar.zst -C ~
-
-# 4. Add the bin folder to your current session PATH
-export PATH=$PATH:$HOME/bin
-```
-
----
-
-## Step 2: Start Ollama in the Background (CPU Mode)
-Run Ollama in CPU mode to prevent Out-of-Memory (OOM) conflicts with the PyTorch CUDA backend:
-
-```bash
-# 1. Clean up any existing instances
-kill -9 $(pgrep ollama)
-kill -9 $(pgrep llama)
-
-# 2. Start Ollama in the background bound to all network interfaces
-CUDA_VISIBLE_DEVICES="" OLLAMA_HOST="0.0.0.0" ollama serve > ~/ollama.log 2>&1 &
-
-# 3. Wait 5 seconds and verify Ollama is responding on the Jetson bridge IP
-curl http://172.17.0.1:11434/
-
-# 4. Pull the Llama 3.2 1B model
-ollama pull llama3.2:1b
-```
+2. Create and populate the `.env` file directly from the terminal. Run the following command (replace `http://172.17.0.1:11434` with your actual remote Ollama URL if it is different):
+   ```bash
+   cat << 'EOF' > .env
+   OLLAMA_BASE_URL=http://172.17.0.1:11434
+   OLLAMA_MODEL=llama3.2:1b
+   DB_PATH=./index/codegenome.db
+   MANIFEST_PATH=./index/manifest.json
+   API_HOST=0.0.0.0
+   API_PORT=8000
+   FRONTEND_STATIC_DIR=frontend/dist
+   ENV=prod
+   EOF
+   ```
 
 ---
 
-## Step 3: Start ngrok in the Background
+## Step 2: Start ngrok in the Background
 Download the ngrok binary and run it in the background to tunnel your application on port 8000:
 
 ```bash
@@ -65,7 +50,7 @@ tar -xvzf ngrok-v3-stable-linux-arm64.tgz
 
 ---
 
-## Step 4: Get the ngrok Forwarding Link
+## Step 3: Get the ngrok Forwarding Link
 To get the public URL to access the dashboard, search the ngrok log file:
 
 ```bash
@@ -74,7 +59,7 @@ cat ngrok.log | grep -o 'url=https://[a-zA-Z0-9.-]*'
 
 ---
 
-## Step 5: Start the CodeGenome-Edge Backend Server
+## Step 4: Start the CodeGenome-Edge Backend Server
 Enter your repository directory, activate the Python virtual environment, and start the FastAPI uvicorn server:
 
 ```bash

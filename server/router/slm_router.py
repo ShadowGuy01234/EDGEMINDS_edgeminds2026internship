@@ -51,7 +51,7 @@ def call_ollama(query: str) -> RouterDecision:
             "temperature": 0.0,
             "num_predict": 80,
             "num_ctx": 512,
-            "num_gpu": 1,
+            "num_gpu": 0,
             "use_mmap": True,
             "stop": ["\n\n", "```"]
         },
