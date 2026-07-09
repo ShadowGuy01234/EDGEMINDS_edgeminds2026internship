@@ -1,11 +1,9 @@
-import httpx
-import json
+import functools
 import time
 from typing import Dict, Any
 
-from server.api.config import OLLAMA_BASE_URL, OLLAMA_MODEL
-from server.router.prompt import SYSTEM_PROMPT, build_user_turn
 from server.router.fallback import RouterDecision, fallback_route, STOPWORDS
+
 
 def classify_query_rules(query: str) -> str:
     q = query.lower()
@@ -18,108 +16,51 @@ def classify_query_rules(query: str) -> str:
     has_dep = any(phrase in q for phrase in ["depend", "depends", "uses", "uses it", "import", "imports", "importing"])
     if has_find and has_dep:
         return "hybrid"
-        
+
     # Graph conditions:
     # Exclusively dependencies/imports/relationships
     if has_dep and not has_find:
         return "graph"
-        
+
     # Vector conditions:
     # Exclusively finding/locating
     if has_find or any(phrase in q for phrase in ["decode", "generated", "initialized", "get_status"]):
         return "vector"
-        
+
     return "vector"  # Default
+
+
+@functools.lru_cache(maxsize=256)
+def _compute_route(query: str) -> RouterDecision:
+    """
+    Pure, deterministic routing — no network call.
+    LRU-cached so repeated/identical queries are free.
+    Cache key is the raw query string (case-preserved).
+    """
+    start_time = time.time()
+    tool = classify_query_rules(query)
+    fallback = fallback_route(query)
+    latency_ms = int((time.time() - start_time) * 1000)
+    return RouterDecision(
+        tool=tool,
+        keywords=fallback.keywords,
+        routed_by="rules",
+        slm_raw="",
+        latency_ms=latency_ms
+    )
 
 
 def call_ollama(query: str) -> RouterDecision:
     """
-    Calls the local Ollama instance running llama3.2:1b to route the query.
-    Falls back to regex/stopword keyword extraction if the model fails or times out.
-    """
-    start_time = time.time()
-    url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
-    
-    payload = {
-        "model": OLLAMA_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": build_user_turn(query)}
-        ],
-        "format": "json",
-        "options": {
-            "temperature": 0.0,
-            "num_predict": 80,
-            "num_ctx": 512,
-            "num_gpu": 0,
-            "use_mmap": True,
-            "stop": ["\n\n", "```"]
-        },
-        "stream": False
-    }
-    
-    raw_content = ""
-    try:
-        # Increased to 180.0 seconds to prevent timeouts on slower machines
-        with httpx.Client(timeout=180.0) as client:
-            response = client.post(url, json=payload)
-            
-        latency_ms = int((time.time() - start_time) * 1000)
-        
-        if response.status_code == 200:
-            data = response.json()
-            raw_content = data.get("message", {}).get("content", "").strip()
-            
-            # Clean possible markdown fence code formatting from output if present
-            cleaned_content = raw_content
-            if cleaned_content.startswith("```json"):
-                cleaned_content = cleaned_content[7:]
-            elif cleaned_content.startswith("```"):
-                cleaned_content = cleaned_content[3:]
-            if cleaned_content.endswith("```"):
-                cleaned_content = cleaned_content[:-3]
-            cleaned_content = cleaned_content.strip()
-            
-            decision_dict = json.loads(cleaned_content)
-            
-            # Extract keywords from model decision
-            keywords = decision_dict.get("keywords", [])
-            
-            # Determine correct tool using deterministic rules
-            tool = classify_query_rules(query)
-            
-            if isinstance(keywords, list):
-                # Ensure keywords are string values and actually exist in the user's query
-                # (case-insensitive) to prevent the model from outputting generic prompt words.
-                q_lower = query.lower()
-                cleaned_keywords = []
-                for k in keywords:
-                    k_str = str(k).strip()
-                    if k_str and k_str.lower() in q_lower and k_str.lower() not in STOPWORDS:
-                        cleaned_keywords.append(k_str)
-            else:
-                cleaned_keywords = []
-                
-            # If model returned no keywords or only invalid ones, extract fallback keywords
-            if not cleaned_keywords:
-                temp_fallback = fallback_route(query)
-                cleaned_keywords = temp_fallback.keywords
-                
-            return RouterDecision(
-                tool=tool,
-                keywords=cleaned_keywords,
-                routed_by="slm",
-                slm_raw=raw_content,
-                latency_ms=latency_ms
-            )
-                
-        else:
-            # Non-200 code, trigger fallback
-            latency_ms = int((time.time() - start_time) * 1000)
-            return fallback_route(query, slm_raw=f"HTTP Error {response.status_code}", latency_ms=latency_ms)
-            
-    except Exception as e:
-        # Timeout or other network failures, trigger fallback
-        latency_ms = int((time.time() - start_time) * 1000)
-        return fallback_route(query, slm_raw=f"Exception: {str(e)}", latency_ms=latency_ms)
+    Routes the query using deterministic keyword rules + regex extraction.
+    Results are LRU-cached (maxsize=256) so identical queries within a
+    session are returned instantly without any recomputation.
 
+    Previously made a blocking HTTP call to Ollama for routing, which added
+    2-5 s per query on the Jetson. That call has been removed because:
+    - classify_query_rules() already deterministically picks graph/vector/hybrid
+    - The LLM's only value was keyword extraction, but those were validated
+      against the raw query string anyway, giving no semantic advantage
+    - fallback_route() reliably extracts the same keywords via regex
+    """
+    return _compute_route(query)

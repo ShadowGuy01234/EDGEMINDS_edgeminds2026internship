@@ -17,6 +17,8 @@ Since we are using a remote Ollama server, you do not need to install or run Oll
    cat << 'EOF' > .env
    OLLAMA_BASE_URL=http://172.17.0.1:11434
    OLLAMA_MODEL=llama3.2:1b
+   # GPU layer offload: -1 = auto (all layers to GPU), 0 = CPU-only, >0 = explicit layer count
+   OLLAMA_NUM_GPU=-1
    DB_PATH=./index/codegenome.db
    MANIFEST_PATH=./index/manifest.json
    API_HOST=0.0.0.0
@@ -25,6 +27,11 @@ Since we are using a remote Ollama server, you do not need to install or run Oll
    ENV=prod
    EOF
    ```
+
+   > **`OLLAMA_NUM_GPU` explained:**
+   > - `-1` (default) — Ollama auto-detects and offloads all model layers to the Jetson GPU. **Use this.**
+   > - `0` — CPU-only mode. Do not use on Jetson (was the previous default, caused slow responses).
+   > - Any positive integer — sets an explicit GPU layer count if you need to cap VRAM usage.
 
 ---
 
@@ -71,6 +78,35 @@ source venv/bin/activate
 
 # 3. Start the server
 python -m uvicorn server.api.main:app --host 0.0.0.0 --port 8000
+```
+
+### What to expect in the startup logs
+
+On a successful start you will see one of three messages from the Ollama check:
+
+```
+✅ Ollama reachable. Model 'llama3.2:1b' found and ready.
+```
+```
+⚠️  WARNING: Ollama is reachable but model 'llama3.2:1b' was NOT found.
+   Available models: [...]
+   Fix: run  ollama pull llama3.2:1b  on the Ollama host.
+```
+```
+❌ ERROR: Ollama at 'http://...' is not reachable. Check that the Ollama server is running.
+```
+
+If you see the warning, SSH into the Ollama host and run `ollama pull llama3.2:1b` before sending queries.
+
+---
+
+## Step 5: (Optional) Keep the Model Warm
+By default Ollama unloads the model from memory after ~5 minutes of inactivity, causing a cold-start delay on the next query. To keep it loaded indefinitely, run this once after the server starts:
+
+```bash
+curl http://172.17.0.1:11434/api/generate \
+  -d '{"model":"llama3.2:1b","keep_alive":-1}' \
+  -H 'Content-Type: application/json'
 ```
 
 You can now open the ngrok forwarding URL in any web browser to access the CodeGenome-Edge dashboard.

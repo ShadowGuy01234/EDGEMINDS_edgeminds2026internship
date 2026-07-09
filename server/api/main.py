@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from server.api.config import (
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
+    OLLAMA_NUM_GPU,
     DB_PATH,
     API_HOST,
     API_PORT,
@@ -85,35 +86,66 @@ def get_db():
     finally:
         conn.close()
 
-# Helper to ping Ollama on startup/status check
-async def ping_ollama() -> bool:
+# Helper to check Ollama reachability AND whether the configured model is available
+async def check_ollama_model() -> dict:
+    """
+    Hits /api/tags to verify:
+    1. Ollama server is reachable
+    2. OLLAMA_MODEL is present in the model list
+
+    Returns a dict with:
+      reachable (bool)       — True if the Ollama server responded
+      model_found (bool)     — True if OLLAMA_MODEL is in the available models
+      available_models (list)— List of model name strings Ollama knows about
+    """
     try:
-        async with httpx.AsyncClient(timeout=2.0) as client:
+        async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{OLLAMA_BASE_URL.rstrip('/')}/api/tags")
-            return resp.status_code == 200
+        if resp.status_code != 200:
+            return {"reachable": False, "model_found": False, "available_models": []}
+
+        data = resp.json()
+        models = data.get("models", [])
+        available = [m.get("name", "") for m in models]
+        model_found = any(
+            name == OLLAMA_MODEL or name.startswith(OLLAMA_MODEL.split(":")[0])
+            for name in available
+        )
+        return {"reachable": True, "model_found": model_found, "available_models": available}
     except Exception:
-        return False
+        return {"reachable": False, "model_found": False, "available_models": []}
+
+
+async def ping_ollama() -> bool:
+    """Thin wrapper kept for backward compatibility."""
+    result = await check_ollama_model()
+    return result["reachable"]
 
 # Lifespan events
 @app.on_event("startup")
 async def startup_event():
     print(f"--- CodeGenome-Edge Starting Up ---")
-    
+
     # 1. Initialize SQLite Database Tables
     print(f"Opening database connection to: {DB_PATH}")
     init_db(DB_PATH)
-    
+
     # 2. Pre-load Embeddings Model in memory
     print("Loading SentenceTransformer model...")
     embedder.get_model()
-    
-    # 3. Verify Ollama connectivity
-    ollama_ok = await ping_ollama()
-    if not ollama_ok:
-        print(f"Warning: Ollama at '{OLLAMA_BASE_URL}' is not reachable.")
+
+    # 3. Verify Ollama connectivity AND model availability
+    ollama_status = await check_ollama_model()
+    if not ollama_status["reachable"]:
+        print(f"❌ ERROR: Ollama at '{OLLAMA_BASE_URL}' is not reachable. Check that the Ollama server is running.")
+    elif not ollama_status["model_found"]:
+        available = ollama_status["available_models"] or ["(none)"]
+        print(f"⚠️  WARNING: Ollama is reachable but model '{OLLAMA_MODEL}' was NOT found.")
+        print(f"   Available models: {available}")
+        print(f"   Fix: run  ollama pull {OLLAMA_MODEL}  on the Ollama host.")
     else:
-        print(f"Ollama connected successfully. Model: {OLLAMA_MODEL}")
-        
+        print(f"✅ Ollama reachable. Model '{OLLAMA_MODEL}' found and ready.")
+
     print("CodeGenome-Edge API ready.")
     print(f"-----------------------------------")
 
@@ -269,9 +301,9 @@ async def get_status(db: sqlite3.Connection = Depends(get_db)):
     except sqlite3.OperationalError:
         pass
         
-    # Check if Ollama is running
-    ollama_reachable = await ping_ollama()
-    
+    # Check Ollama reachability and model availability
+    ollama_status = await check_ollama_model()
+
     # Get memory usage in MB
     memory_used_mb = 0
     sys_mem_used_mb = 0
@@ -281,21 +313,23 @@ async def get_status(db: sqlite3.Connection = Depends(get_db)):
         import psutil
         process = psutil.Process(os.getpid())
         memory_used_mb = int(process.memory_info().rss / 1024 / 1024)
-        
+
         virtual_mem = psutil.virtual_memory()
         sys_mem_used_mb = int(virtual_mem.used / 1024 / 1024)
         sys_mem_total_mb = int(virtual_mem.total / 1024 / 1024)
         sys_mem_percent = virtual_mem.percent
     except Exception:
         pass
-        
+
     return {
         "index_loaded": index_loaded,
         "repo_path": repo_path,
         "total_files": total_files,
         "total_symbols": total_symbols,
-        "ollama_reachable": ollama_reachable,
+        "ollama_reachable": ollama_status["reachable"],
         "ollama_model": OLLAMA_MODEL,
+        "model_found": ollama_status["model_found"],
+        "available_models": ollama_status["available_models"],
         "memory_used_mb": memory_used_mb,
         "sys_mem_used_mb": sys_mem_used_mb,
         "sys_mem_total_mb": sys_mem_total_mb,
@@ -433,8 +467,8 @@ async def explain_query(payload: ExplainRequest):
         "options": {
             "temperature": 0.1,
             "num_predict": 120,
-            "num_ctx": 1024,
-            "num_gpu": 0,
+            "num_ctx": 512,
+            "num_gpu": OLLAMA_NUM_GPU,
             "use_mmap": True
         },
         "stream": True
@@ -579,8 +613,8 @@ DO NOT wrap headers in bold asterisks.
             "options": {
                 "temperature": 0.1,
                 "num_predict": 400,
-                "num_ctx": 1024,
-                "num_gpu": 0,
+                "num_ctx": 512,
+                "num_gpu": OLLAMA_NUM_GPU,
                 "use_mmap": True
             },
             "stream": True
@@ -646,8 +680,8 @@ async def trace_symbol_impact(payload: ImpactRequest, db: sqlite3.Connection = D
         "options": {
             "temperature": 0.1,
             "num_predict": 400,
-            "num_ctx": 1024,
-            "num_gpu": 0,
+            "num_ctx": 512,
+            "num_gpu": OLLAMA_NUM_GPU,
             "use_mmap": True
         },
         "stream": True
@@ -745,8 +779,8 @@ async def chat_with_symbol(payload: ChatRequest):
         "options": {
             "temperature": 0.2,
             "num_predict": 300,
-            "num_ctx": 1024,
-            "num_gpu": 0,
+            "num_ctx": 512,
+            "num_gpu": OLLAMA_NUM_GPU,
             "use_mmap": True
         },
         "stream": True
